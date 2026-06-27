@@ -22,6 +22,9 @@ export async function POST(request) {
   try {
     await dbConnect();
     const body = await request.json();
+    if (body.basic_salary !== undefined) {
+      body.pending_basic_salary = Number(body.basic_salary);
+    }
     const employee = await Employee.create(body);
     return Response.json(employee, { status: 201 });
   } catch (error) {

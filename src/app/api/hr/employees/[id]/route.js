@@ -14,6 +14,24 @@ export async function PUT(request, { params }) {
     await dbConnect();
     const { id } = await params;
     const body = await request.json();
+
+    const existing = await Employee.findById(id);
+    if (!existing) return Response.json({ error: 'Not found' }, { status: 404 });
+
+    // If basic salary / rate changed
+    if (body.basic_salary !== undefined && Number(body.basic_salary) !== existing.basic_salary) {
+      if (existing.approval_status === 'approved') {
+        // Keep the old approved salary active, push the new one to pending, and set approval to pending
+        body.pending_basic_salary = Number(body.basic_salary);
+        body.basic_salary = existing.basic_salary;
+        body.approval_status = 'pending';
+        body.approval_notes = 'Salary/Rate change pending approval';
+      } else {
+        // For new/pending employees, save it directly to pending_basic_salary
+        body.pending_basic_salary = Number(body.basic_salary);
+      }
+    }
+
     const employee = await Employee.findByIdAndUpdate(id, body, { new: true, runValidators: true });
     if (!employee) return Response.json({ error: 'Not found' }, { status: 404 });
     return Response.json(employee);

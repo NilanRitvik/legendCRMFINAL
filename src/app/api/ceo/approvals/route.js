@@ -109,11 +109,24 @@ export async function PUT(request) {
       const employee = await Employee.findById(id);
       if (!employee) return Response.json({ error: 'Employee not found' }, { status: 404 });
 
-      employee.approval_status = status;
-      employee.approval_notes = notes || '';
-      // If rejected, deactivate status
-      if (status === 'rejected') {
-        employee.status = 'inactive';
+      if (status === 'approved') {
+        if (employee.pending_basic_salary !== null && employee.pending_basic_salary !== undefined) {
+          employee.basic_salary = employee.pending_basic_salary;
+        }
+        employee.approval_status = 'approved';
+        employee.approval_notes = notes || 'Approved';
+      } else if (status === 'rejected') {
+        // If the employee was already approved previously (i.e. this is just a salary change rejection)
+        if (employee.basic_salary && employee.pending_basic_salary !== employee.basic_salary) {
+          employee.pending_basic_salary = employee.basic_salary; // Revert pending change
+          employee.approval_status = 'approved'; // Re-approve under old salary
+          employee.approval_notes = notes || 'Salary change rejected, old salary kept';
+        } else {
+          // This is a brand new employee rejection
+          employee.approval_status = 'rejected';
+          employee.approval_notes = notes || 'Rejected';
+          employee.status = 'inactive';
+        }
       }
       await employee.save();
       return Response.json({ success: true, record: employee });

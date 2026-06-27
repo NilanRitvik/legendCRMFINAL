@@ -264,7 +264,8 @@ const EmployeeSchema = new mongoose.Schema({
   esi_applicable: { type: Boolean, default: false },
   tds_percent: { type: Number, default: 0 },
   approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  approval_notes: { type: String, default: '' }
+  approval_notes: { type: String, default: '' },
+  pending_basic_salary: { type: Number, default: null }
 }, { timestamps: true });
 
 // 13. Leave Request Schema
@@ -326,7 +327,10 @@ const PayrollSchema = new mongoose.Schema({
   notes: { type: String, default: '' },
 }, { timestamps: true });
 
-export const Employee = createModelProxy('Employee', mongoose.models.Employee || mongoose.model('Employee', EmployeeSchema));
+if (mongoose.models.Employee) {
+  delete mongoose.models.Employee;
+}
+export const Employee = createModelProxy('Employee', mongoose.model('Employee', EmployeeSchema));
 export const LeaveRequest = createModelProxy('LeaveRequest', mongoose.models.LeaveRequest || mongoose.model('LeaveRequest', LeaveRequestSchema));
 export const Attendance = createModelProxy('Attendance', mongoose.models.Attendance || mongoose.model('Attendance', AttendanceSchema));
 export const Payroll = createModelProxy('Payroll', mongoose.models.Payroll || mongoose.model('Payroll', PayrollSchema));

@@ -1556,12 +1556,17 @@ export default function CEOPage() {
                         ...(item.notes ? [['Notes', item.notes]] : [])
                       ];
                     } else if (activeApprovalTab === 'hr') {
-                      cardTitle = `Hiring Request: ${item.name}`;
+                      const isSalaryChange = item.basic_salary && item.pending_basic_salary !== null && item.pending_basic_salary !== undefined && item.pending_basic_salary !== item.basic_salary;
+                      cardTitle = isSalaryChange ? `Salary/Rate Update: ${item.name}` : `Hiring Request: ${item.name}`;
+                      const rateUnit = item.rate_type === 'hourly' ? '/hr' : item.rate_type === 'project' ? '/proj' : '/mo';
                       detailsGrid = [
                         ['Designation', item.designation],
                         ['Department', item.department],
                         ['Employment Type', item.employment_type?.replace('_', ' ').toUpperCase()],
-                        ['Proposed Salary', `₹${item.basic_salary.toLocaleString()} / mo`],
+                        ['Proposed Rate/Salary', isSalaryChange 
+                          ? `₹${item.basic_salary.toLocaleString()} ➡️ ₹${item.pending_basic_salary.toLocaleString()} ${rateUnit}`
+                          : `₹${(item.pending_basic_salary || item.basic_salary || 0).toLocaleString()} ${rateUnit}`
+                        ],
                         ['Phone', item.phone || 'N/A'],
                         ['Email', item.email || 'N/A'],
                         ['Join Date', item.join_date ? new Date(item.join_date).toLocaleDateString('en-IN') : 'Immediate']

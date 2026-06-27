@@ -46,6 +46,14 @@ export default function AttendancePage() {
   const [loadingMonthly, setLoadingMonthly] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [projects, setProjects] = useState([]);
+  const [gridLogModal, setGridLogModal] = useState({
+    isOpen: false,
+    employeeId: '',
+    employeeName: '',
+    dayNum: null,
+    dateStr: '',
+    logs: []
+  });
 
   const getDaysInMonth = (m, y) => new Date(y, m, 0).getDate();
   const daysCount = getDaysInMonth(month, year);
@@ -379,42 +387,114 @@ export default function AttendancePage() {
     }
   };
 
-  // Edit Freelancer Hours in Grid Sheet
-  const editGridHours = async (empId, dayNum) => {
+  // Edit Freelancer Hours in Grid Sheet via Modal
+  const openGridLogModal = async (empId, dayNum) => {
     const emp = employees.find(e => e._id === empId);
     if (!emp) return;
-    const currentHours = gridWorkData[empId]?.[dayNum] || 0;
-    const dayLabel = `${dayNum} ${MONTHS[month-1]} ${year}`;
-    const newHoursStr = prompt(`Enter hours worked for ${emp.name} on ${dayLabel}:`, currentHours);
-    if (newHoursStr === null) return; // cancelled
-
-    const newHours = parseFloat(newHoursStr) || 0;
-
-    // Optimistic Update
-    setGridWorkData(prev => ({
-      ...prev,
-      [empId]: { ...prev[empId], [dayNum]: newHours }
-    }));
-
-    // Save
-    const dayStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    
     try {
-      await fetch('/api/hr/attendance/worklogs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: dayStr,
-          records: [{ employeeId: empId, hours_worked: newHours, description: 'Grid entry' }]
-        })
+      const res = await fetch(`/api/hr/attendance/worklogs?date=${dateStr}&employee=${empId}`);
+      const data = await res.json();
+      
+      const mappedLogs = Array.isArray(data) && data.length > 0
+        ? data.map(r => {
+            const h = Math.floor(r.hours_worked || 0);
+            const m = Math.round(((r.hours_worked || 0) - h) * 60);
+            return {
+              projectId: r.project?._id || r.project || '',
+              hours: h,
+              minutes: m,
+              description: r.description || ''
+            };
+          })
+        : [{ projectId: '', hours: 0, minutes: 0, description: '' }];
+
+      setGridLogModal({
+        isOpen: true,
+        employeeId: empId,
+        employeeName: emp.name,
+        dayNum,
+        dateStr,
+        logs: mappedLogs
       });
     } catch (e) {
       console.error(e);
-      // Revert
-      setGridWorkData(prev => ({
-        ...prev,
-        [empId]: { ...prev[empId], [dayNum]: currentHours }
-      }));
+      alert('Failed to load work logs.');
     }
+  };
+
+  const saveGridLogModal = async () => {
+    const { employeeId, dateStr, logs, dayNum } = gridLogModal;
+    const records = [];
+    let totalDecimalHours = 0;
+    
+    logs.forEach(log => {
+      const hrs = parseFloat(log.hours) || 0;
+      const mins = parseFloat(log.minutes) || 0;
+      const dec = hrs + (mins / 60);
+      if (dec > 0) {
+        totalDecimalHours += dec;
+        records.push({
+          employeeId,
+          projectId: log.projectId || null,
+          hours_worked: dec,
+          description: log.description || ''
+        });
+      }
+    });
+
+    try {
+      const res = await fetch('/api/hr/attendance/worklogs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr, records })
+      });
+      if (res.ok) {
+        setGridWorkData(prev => ({
+          ...prev,
+          [employeeId]: {
+            ...prev[employeeId],
+            [dayNum]: totalDecimalHours
+          }
+        }));
+        setGridLogModal(prev => ({ ...prev, isOpen: false }));
+        setRefreshTrigger(prev => prev + 1);
+      } else {
+        const errorData = await res.json();
+        alert(`Error: ${errorData.error || 'Failed to save logs'}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save logs.');
+    }
+  };
+
+  const updateGridLogModalField = (index, field, value) => {
+    setGridLogModal(prev => {
+      const logs = [...prev.logs];
+      if (logs[index]) {
+        logs[index] = { ...logs[index], [field]: value };
+      }
+      return { ...prev, logs };
+    });
+  };
+
+  const addGridLogModalEntry = () => {
+    setGridLogModal(prev => ({
+      ...prev,
+      logs: [...prev.logs, { projectId: '', hours: 0, minutes: 0, description: '' }]
+    }));
+  };
+
+  const removeGridLogModalEntry = (index) => {
+    setGridLogModal(prev => {
+      const logs = prev.logs.filter((_, idx) => idx !== index);
+      return { 
+        ...prev, 
+        logs: logs.length > 0 ? logs : [{ projectId: '', hours: 0, minutes: 0, description: '' }] 
+      };
+    });
   };
 
   // Save Handlers
@@ -557,7 +637,7 @@ export default function AttendancePage() {
       const hours = gridWorkData[emp._id]?.[dayNum] || 0;
       return (
         <div 
-          onClick={() => editable && editGridHours(emp._id, dayNum)}
+          onClick={() => editable && openGridLogModal(emp._id, dayNum)}
           title={editable ? "Click to log hours" : "Frozen"}
           style={{
             minWidth: '24px', height: '24px', borderRadius: '4px',
@@ -1145,6 +1225,102 @@ export default function AttendancePage() {
             )}
           </div>
         </>
+      )}
+      {/* Freelancer Multi-Project log popup modal */}
+      {gridLogModal.isOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '750px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--card-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-main)' }}>Log Project Hours: {gridLogModal.employeeName}</h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Date: {gridLogModal.dateStr}</span>
+              </div>
+              <button onClick={() => setGridLogModal(prev => ({ ...prev, isOpen: false }))} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+            </div>
+
+            <div style={{ padding: '24px', flex: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                {gridLogModal.logs.map((log, index) => (
+                  <div key={index} style={{ display: 'grid', gridTemplateColumns: '1.2fr 80px 80px 1.5fr 40px', gap: '8px', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                    
+                    {/* Project dropdown select */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '4px' }}>Project / Site</label>
+                      <select
+                        value={log.projectId || ''}
+                        onChange={e => updateGridLogModalField(index, 'projectId', e.target.value)}
+                        style={{ width: '100%', padding: '7px 8px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: '#fff' }}
+                      >
+                        <option value="">-- General / Non-Project --</option>
+                        {projects.map(p => (
+                          <option key={p._id} value={p._id}>{p.name} ({p.client?.name || 'No Client'})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Hours input */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '4px' }}>Hours</label>
+                      <input 
+                        type="number" min="0" max="24"
+                        value={log.hours}
+                        onChange={e => updateGridLogModalField(index, 'hours', parseInt(e.target.value) || 0)}
+                        style={{ width: '100%', padding: '7px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', outline: 'none' }}
+                      />
+                    </div>
+
+                    {/* Minutes input */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '4px' }}>Minutes</label>
+                      <input 
+                        type="number" min="0" max="59" step="5"
+                        value={log.minutes}
+                        onChange={e => updateGridLogModalField(index, 'minutes', parseInt(e.target.value) || 0)}
+                        style={{ width: '100%', padding: '7px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', outline: 'none' }}
+                      />
+                    </div>
+
+                    {/* Description/Task input */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '4px' }}>Work Performed / Tasks</label>
+                      <input 
+                        type="text" placeholder="E.g. 3D drafts, site meeting"
+                        value={log.description}
+                        onChange={e => updateGridLogModalField(index, 'description', e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                      />
+                    </div>
+
+                    {/* Delete button */}
+                    <div style={{ textAlign: 'center', paddingTop: '16px' }}>
+                      <button
+                        onClick={() => removeGridLogModalEntry(index)}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '14px', cursor: 'pointer' }}
+                        title="Delete log"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                onClick={addGridLogModalEntry}
+                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '700', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                ➕ Add Another Project Log
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--card-border)', display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#f9fafb', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
+              <button onClick={() => setGridLogModal(prev => ({ ...prev, isOpen: false }))} style={{ padding: '8px 16px', background: '#fff', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', fontWeight: '700', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveGridLogModal} style={{ padding: '8px 20px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>Save Logs</button>
+            </div>
+
+          </div>
+        </div>
       )}
     </div>
   );

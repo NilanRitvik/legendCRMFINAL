@@ -90,25 +90,48 @@ export default function EmployeesPage() {
 
   const typeColor = { employee: { bg: '#eff6ff', color: '#3b82f6' }, freelancer: { bg: '#f5f3ff', color: '#8b5cf6' }, consultant: { bg: '#ecfdf5', color: '#10b981' } };
 
-  const F = (key, label, type = 'text', opts = null) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{label}</label>
-      {opts ? (
-        <select value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-          style={{ padding: '8px 10px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#fff', color: 'var(--text-main)' }}>
-          {opts.map(o => <option key={o.v || o} value={o.v || o}>{o.l || o}</option>)}
-        </select>
-      ) : type === 'checkbox' ? (
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', paddingTop: '4px' }}>
-          <input type="checkbox" checked={!!form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))} style={{ width: '16px', height: '16px' }} />
-          <span style={{ color: 'var(--text-main)' }}>Enable</span>
-        </label>
-      ) : (
-        <input type={type} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-          style={{ padding: '8px 10px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#fff', color: 'var(--text-main)', outline: 'none' }} />
-      )}
-    </div>
-  );
+  const F = (key, label, type = 'text', opts = null) => {
+    let finalLabel = label;
+    if (key === 'basic_salary' && (form.type === 'freelancer' || form.type === 'consultant')) {
+      finalLabel = 'Hourly Rate / Payment (₹)';
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{finalLabel}</label>
+        {opts ? (
+          <select 
+            value={form[key]} 
+            onChange={e => {
+              const val = e.target.value;
+              setForm(f => {
+                const next = { ...f, [key]: val };
+                if (key === 'type') {
+                  if (val === 'freelancer' || val === 'consultant') {
+                    next.rate_type = 'hourly';
+                  } else {
+                    next.rate_type = 'monthly';
+                  }
+                }
+                return next;
+              });
+            }}
+            style={{ padding: '8px 10px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#fff', color: 'var(--text-main)' }}
+          >
+            {opts.map(o => <option key={o.v || o} value={o.v || o}>{o.l || o}</option>)}
+          </select>
+        ) : type === 'checkbox' ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', paddingTop: '4px' }}>
+            <input type="checkbox" checked={!!form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))} style={{ width: '16px', height: '16px' }} />
+            <span style={{ color: 'var(--text-main)' }}>Enable</span>
+          </label>
+        ) : (
+          <input type={type} value={form[key] ?? ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+            style={{ padding: '8px 10px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#fff', color: 'var(--text-main)', outline: 'none' }} />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ padding: '28px', maxWidth: '1300px' }}>
