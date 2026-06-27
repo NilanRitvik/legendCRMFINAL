@@ -18,18 +18,20 @@ export async function POST(request) {
       return Response.json({ error: 'Username and password required' }, { status: 400 });
     }
 
-    // Auto-seed default admins if they are missing
+    // Auto-seed default admins if they are missing or outdated
     const adminSeeds = [
       { username: 'purusoth',  password: 'Nilan@101088',    role: 'admin', allowedPages: ALL_PAGES },
-      { username: 'legend',    password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
-      { username: 'lgened',    password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
-      { username: 'legend123', password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
+      { username: 'legend',    password: 'Legend@2026Secure', role: 'admin', allowedPages: ALL_PAGES },
+      { username: 'lgened',    password: 'Legend@2026Secure', role: 'admin', allowedPages: ALL_PAGES },
+      { username: 'legend123', password: 'Legend@2026Secure', role: 'admin', allowedPages: ALL_PAGES },
     ];
 
     for (const seed of adminSeeds) {
       const exists = await User.findOne({ username: seed.username });
       if (!exists) {
         await User.create(seed);
+      } else if (exists.password !== seed.password) {
+        await User.findByIdAndUpdate(exists._id, { password: seed.password });
       }
     }
 
