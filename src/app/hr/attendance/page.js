@@ -234,6 +234,31 @@ export default function AttendancePage() {
     setAttendance(prev => ({ ...prev, [empId]: { ...prev[empId], [field]: parseFloat(value) || 0 } }));
   };
 
+  const numInput = (empId, field, label, min = 0, max = 31) => {
+    const rec = attendance[empId] || {};
+    const val = rec[field] ?? (field === 'total_working_days' ? defaultWorkingDays : 0);
+    return (
+      <td style={{ padding: '8px', textAlign: 'center' }}>
+        <input 
+          type="number" 
+          min={min} 
+          max={max} 
+          value={val} 
+          onChange={e => updateMonthlyField(empId, field, e.target.value)}
+          style={{ 
+            width: '60px', 
+            padding: '4px 6px', 
+            borderRadius: '4px', 
+            border: '1px solid var(--card-border)', 
+            textAlign: 'center',
+            fontSize: '12px' 
+          }} 
+          title={label}
+        />
+      </td>
+    );
+  };
+
   // Click-to-Cycle status in Grid Sheet
   const cycleGridStatus = async (empId, dayNum) => {
     const currentStatus = gridDailyData[empId]?.[dayNum] || 'unmarked';
