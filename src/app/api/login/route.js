@@ -23,6 +23,7 @@ export async function POST(request) {
       { username: 'purusoth',  password: 'Nilan@101088',    role: 'admin', allowedPages: ALL_PAGES },
       { username: 'legend',    password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
       { username: 'lgened',    password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
+      { username: 'legend123', password: 'legend123',       role: 'admin', allowedPages: ALL_PAGES },
     ];
 
     for (const seed of adminSeeds) {
