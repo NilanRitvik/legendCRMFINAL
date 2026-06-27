@@ -40,9 +40,11 @@ export async function GET(request) {
       let teamCostTotal = 0;
       if (proj.team && Array.isArray(proj.team)) {
         proj.team.forEach(alloc => {
-          if (alloc.member && alloc.member.monthly_cost) {
-            const costPerMonth = alloc.member.monthly_cost * (alloc.allocation / 100);
-            teamCostTotal += costPerMonth * durationMonths;
+          if (alloc.member) {
+            const salary = alloc.member.basic_salary || alloc.member.monthly_cost || 0;
+            const costPerMonth = alloc.member.rate_type === 'hourly' ? salary * 160 : salary;
+            const cost = costPerMonth * (alloc.allocation / 100);
+            teamCostTotal += cost * durationMonths;
           }
         });
       }

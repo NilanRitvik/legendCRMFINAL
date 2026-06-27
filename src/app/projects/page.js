@@ -69,7 +69,7 @@ export default function ProjectsPage() {
       const validClients = Array.isArray(dataClients) ? dataClients : [];
       setClients(validClients.filter(c => c.stage === 'won' || c.stage === 'prospect'));
 
-      const resTeam = await fetch('/api/team');
+      const resTeam = await fetch('/api/hr/employees?status=active');
       const dataTeam = await resTeam.json();
       setTeamMembers(Array.isArray(dataTeam) ? dataTeam : []);
     } catch (err) {
@@ -1003,9 +1003,17 @@ export default function ProjectsPage() {
                         value={allocation.member} onChange={e => setAllocation({ ...allocation, member: e.target.value })}
                       >
                         <option value="">-- Choose Member --</option>
-                        {teamMembers.map(m => (
-                          <option key={m._id} value={m._id}>{m.name} ({m.role} - {m.resource_type || 'fulltime'}) - ₹{m.monthly_cost}/mo</option>
-                        ))}
+                        {teamMembers.map(m => {
+                          const rateTypeUnit = m.rate_type === 'hourly' ? '/hr' : m.rate_type === 'project' ? '/proj' : '/mo';
+                          const displayRole = m.designation || m.role || 'Member';
+                          const displayType = m.type || m.resource_type || 'fulltime';
+                          const displaySalary = m.basic_salary || m.monthly_cost || 0;
+                          return (
+                            <option key={m._id} value={m._id}>
+                              {m.name} ({displayRole} - {displayType}) - ₹{displaySalary.toLocaleString()}{rateTypeUnit}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div className="form-group" style={{ margin: 0, flex: 1 }}>
@@ -1035,17 +1043,17 @@ export default function ProjectsPage() {
                               <td style={{ fontWeight: '600' }}>{alloc.member.name}</td>
                               <td>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span>{alloc.member.role}</span>
+                                  <span>{alloc.member.designation || alloc.member.role || 'Member'}</span>
                                   <span style={{ 
                                     fontSize: '9px', 
-                                    backgroundColor: alloc.member.resource_type === 'fulltime' ? '#ecfdf5' : alloc.member.resource_type === 'freelancer' ? '#eff6ff' : '#fffbeb', 
-                                    color: alloc.member.resource_type === 'fulltime' ? '#065f46' : alloc.member.resource_type === 'freelancer' ? '#1d4ed8' : '#b45309',
+                                    backgroundColor: (alloc.member.type || alloc.member.resource_type) === 'employee' || (alloc.member.type || alloc.member.resource_type) === 'fulltime' ? '#ecfdf5' : (alloc.member.type || alloc.member.resource_type) === 'freelancer' ? '#eff6ff' : '#fffbeb', 
+                                    color: (alloc.member.type || alloc.member.resource_type) === 'employee' || (alloc.member.type || alloc.member.resource_type) === 'fulltime' ? '#065f46' : (alloc.member.type || alloc.member.resource_type) === 'freelancer' ? '#1d4ed8' : '#b45309',
                                     padding: '1px 5px',
                                     borderRadius: '3px',
                                     fontWeight: '700',
                                     textTransform: 'uppercase'
                                   }}>
-                                    {alloc.member.resource_type || 'fulltime'}
+                                    {alloc.member.type || alloc.member.resource_type || 'fulltime'}
                                   </span>
                                 </div>
                               </td>

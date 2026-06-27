@@ -101,7 +101,7 @@ const ProjectSchema = new mongoose.Schema({
   file_source_link: String,
 
   team: [{
-    member: { type: mongoose.Schema.Types.ObjectId, ref: 'Team' },
+    member: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
     allocation: { type: Number, min: 0, max: 100 }
   }],
   status_notes: { type: String, default: '' },
@@ -219,7 +219,10 @@ const UserSchema = new mongoose.Schema({
 
 export const Client = createModelProxy('Client', mongoose.models.Client || mongoose.model('Client', ClientSchema));
 export const Quotation = createModelProxy('Quotation', mongoose.models.Quotation || mongoose.model('Quotation', QuotationSchema));
-export const Project = createModelProxy('Project', mongoose.models.Project || mongoose.model('Project', ProjectSchema));
+if (mongoose.models.Project) {
+  delete mongoose.models.Project;
+}
+export const Project = createModelProxy('Project', mongoose.model('Project', ProjectSchema));
 export const Document = createModelProxy('Document', mongoose.models.Document || mongoose.model('Document', DocumentSchema));
 export const Invoice = createModelProxy('Invoice', mongoose.models.Invoice || mongoose.model('Invoice', InvoiceSchema));
 export const Payment = createModelProxy('Payment', mongoose.models.Payment || mongoose.model('Payment', PaymentSchema));
