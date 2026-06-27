@@ -44,6 +44,7 @@ export default function AttendancePage() {
   // Tab 4: Monthly Summary states
   const [attendance, setAttendance] = useState({}); // { [empId]: { total_working_days, present_days, half_days, late_days, overtime_hours, notes } }
   const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const getDaysInMonth = (m, y) => new Date(y, m, 0).getDate();
   const daysCount = getDaysInMonth(month, year);
@@ -183,7 +184,7 @@ export default function AttendancePage() {
     if (activeTab === 'grid') {
       loadGridData();
     }
-  }, [employees, month, year, activeTab]);
+  }, [employees, month, year, activeTab, refreshTrigger]);
 
   // 5. Load monthly summaries when employees or month/year changes
   useEffect(() => {
@@ -214,7 +215,7 @@ export default function AttendancePage() {
       }
     };
     loadMonthly();
-  }, [employees, month, year]);
+  }, [employees, month, year, refreshTrigger]);
 
   // Updaters
   const updateDailyStatus = (empId, status) => {
@@ -269,6 +270,34 @@ export default function AttendancePage() {
         ...prev,
         [empId]: { ...prev[empId], [dayNum]: currentStatus }
       }));
+    }
+  };
+
+  const handleBulkFill = async (employeeId, status) => {
+    setLoadingGrid(true);
+    try {
+      const res = await fetch('/api/hr/attendance/daily', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bulk_employee_month',
+          employeeId,
+          month,
+          year,
+          status
+        })
+      });
+      if (res.ok) {
+        setRefreshTrigger(prev => prev + 1);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to bulk update');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error connecting to server.');
+    } finally {
+      setLoadingGrid(false);
     }
   };
 
@@ -762,6 +791,39 @@ export default function AttendancePage() {
                         <div style={{ fontSize: '9px', color: emp.type === 'employee' ? '#10b981' : '#8b5cf6', fontWeight: '700' }}>
                           {emp.type === 'employee' ? 'Salaried' : 'Hourly'}
                         </div>
+                        {emp.type === 'employee' && (
+                          <div style={{ marginTop: '6px' }}>
+                            <select 
+                              defaultValue=""
+                              onChange={async (e) => {
+                                const val = e.target.value;
+                                if (!val) return;
+                                if (confirm(`Mark all days of the month as ${val.toUpperCase()} for ${emp.name}?`)) {
+                                  await handleBulkFill(emp._id, val);
+                                }
+                                e.target.value = "";
+                              }}
+                              style={{ 
+                                padding: '2px 4px', 
+                                fontSize: '10px', 
+                                border: '1px solid #cbd5e1', 
+                                borderRadius: '4px', 
+                                background: '#f8fafc',
+                                color: 'var(--text-muted)',
+                                outline: 'none',
+                                cursor: 'pointer',
+                                width: '100%'
+                              }}
+                            >
+                              <option value="">⚡ Quick Fill</option>
+                              <option value="present">All Present</option>
+                              <option value="late">All Late</option>
+                              <option value="half_day">All Half Day</option>
+                              <option value="absent">All Absent</option>
+                              <option value="unmarked">All Unmarked</option>
+                            </select>
+                          </div>
+                        )}
                       </td>
 
                       {/* Calendar date grid columns */}

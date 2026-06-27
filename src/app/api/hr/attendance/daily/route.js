@@ -44,15 +44,95 @@ export async function GET(request) {
 export async function POST(request) {
   await dbConnect();
   const body = await request.json();
-  const { date, records } = body; // date: YYYY-MM-DD, records: [{ employeeId, status, overtime_hours, notes }]
+  let { action, employeeId, month, year, status, date, records } = body;
+
+  if (action === 'bulk_employee_month') {
+    if (!employeeId || !month || !year || !status) {
+      return Response.json({ error: 'Missing parameters for bulk update' }, { status: 400 });
+    }
+
+    const y = parseInt(year);
+    const m = parseInt(month);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    
+    // Save daily attendance records for all days of the month
+    for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      const parsedDate = new Date(dateStr + 'T00:00:00.000Z');
+      
+      await DailyAttendance.findOneAndUpdate(
+        { employee: employeeId, date: parsedDate },
+        { 
+          employee: employeeId, 
+          date: parsedDate, 
+          status: status, 
+          overtime_hours: 0, 
+          notes: 'Bulk month fill' 
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    // Aggregate monthly summary
+    const startOfMonth = new Date(Date.UTC(y, m - 1, 1));
+    const endOfMonth = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+
+    const dailyRecords = await DailyAttendance.find({
+      employee: employeeId,
+      date: { $gte: startOfMonth, $lte: endOfMonth }
+    });
+
+    let present_days = 0;
+    let absent_days = 0;
+    let half_days = 0;
+    let late_days = 0;
+    let overtime_hours = 0;
+
+    dailyRecords.forEach(rec => {
+      if (rec.status === 'present') {
+        present_days += 1;
+      } else if (rec.status === 'late') {
+        present_days += 1;
+        late_days += 1;
+      } else if (rec.status === 'half_day') {
+        present_days += 0.5;
+        absent_days += 0.5;
+        half_days += 1;
+      } else if (rec.status === 'absent') {
+        absent_days += 1;
+      }
+      overtime_hours += rec.overtime_hours || 0;
+    });
+
+    const existing = await Attendance.findOne({ employee: employeeId, month: m, year: y });
+    const total_working_days = existing ? existing.total_working_days : getWorkingDaysInMonth(m, y);
+
+    await Attendance.findOneAndUpdate(
+      { employee: employeeId, month: m, year: y },
+      {
+        employee: employeeId,
+        month: m,
+        year: y,
+        total_working_days,
+        present_days,
+        absent_days,
+        half_days,
+        late_days,
+        overtime_hours
+      },
+      { upsert: true, new: true }
+    );
+
+    return Response.json({ success: true });
+  }
 
   if (!date || !Array.isArray(records)) {
     return Response.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
   const parsedDate = new Date(date + 'T00:00:00.000Z');
-  const year = parsedDate.getUTCFullYear();
-  const month = parsedDate.getUTCMonth() + 1;
+  year = parsedDate.getUTCFullYear();
+  month = parsedDate.getUTCMonth() + 1;
 
   // 1. Save all daily attendance records
   for (const r of records) {
