@@ -1004,7 +1004,7 @@ export default function ProjectsPage() {
                       >
                         <option value="">-- Choose Member --</option>
                         {teamMembers.map(m => (
-                          <option key={m._id} value={m._id}>{m.name} ({m.role}) - ₹{m.monthly_cost}/mo</option>
+                          <option key={m._id} value={m._id}>{m.name} ({m.role} - {m.resource_type || 'fulltime'}) - ₹{m.monthly_cost}/mo</option>
                         ))}
                       </select>
                     </div>
@@ -1033,7 +1033,22 @@ export default function ProjectsPage() {
                           alloc.member && (
                             <tr key={alloc.member._id}>
                               <td style={{ fontWeight: '600' }}>{alloc.member.name}</td>
-                              <td>{alloc.member.role}</td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span>{alloc.member.role}</span>
+                                  <span style={{ 
+                                    fontSize: '9px', 
+                                    backgroundColor: alloc.member.resource_type === 'fulltime' ? '#ecfdf5' : alloc.member.resource_type === 'freelancer' ? '#eff6ff' : '#fffbeb', 
+                                    color: alloc.member.resource_type === 'fulltime' ? '#065f46' : alloc.member.resource_type === 'freelancer' ? '#1d4ed8' : '#b45309',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
+                                    fontWeight: '700',
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {alloc.member.resource_type || 'fulltime'}
+                                  </span>
+                                </div>
+                              </td>
                               <td>{alloc.allocation}%</td>
                               <td>
                                 <button 

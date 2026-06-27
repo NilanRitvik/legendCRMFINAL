@@ -205,7 +205,8 @@ const CompanyAssetSchema = new mongoose.Schema({
 const TeamSchema = new mongoose.Schema({
   name: { type: String, required: true },
   role: { type: String, required: true },
-  monthly_cost: { type: Number, required: true }
+  monthly_cost: { type: Number, required: true },
+  resource_type: { type: String, enum: ['fulltime', 'freelancer', 'consultant'], default: 'fulltime' }
 }, { timestamps: true });
 
 // 11. User / Access Schema
@@ -225,7 +226,10 @@ export const Payment = createModelProxy('Payment', mongoose.models.Payment || mo
 export const VendorPayable = createModelProxy('VendorPayable', mongoose.models.VendorPayable || mongoose.model('VendorPayable', VendorPayableSchema));
 export const Expense = createModelProxy('Expense', mongoose.models.Expense || mongoose.model('Expense', ExpenseSchema));
 export const CompanyAsset = createModelProxy('CompanyAsset', mongoose.models.CompanyAsset || mongoose.model('CompanyAsset', CompanyAssetSchema));
-export const Team = createModelProxy('Team', mongoose.models.Team || mongoose.model('Team', TeamSchema));
+if (mongoose.models.Team) {
+  delete mongoose.models.Team;
+}
+export const Team = createModelProxy('Team', mongoose.model('Team', TeamSchema));
 export const User = createModelProxy('User', mongoose.models.User || mongoose.model('User', UserSchema));
 
 

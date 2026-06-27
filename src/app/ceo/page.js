@@ -54,7 +54,7 @@ export default function CEOPage() {
   const [team, setTeam] = useState([]);
   const [projects, setProjects] = useState([]);
   const [teamLoading, setTeamLoading] = useState(true);
-  const [newMember, setNewMember] = useState({ name: '', role: '', monthly_cost: '' });
+  const [newMember, setNewMember] = useState({ name: '', role: '', monthly_cost: '', resource_type: 'fulltime' });
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [teamActiveSubTab, setTeamActiveSubTab] = useState('resources'); // resources | logins
@@ -478,7 +478,7 @@ export default function CEOPage() {
         })
       });
       if (res.ok) {
-        setNewMember({ name: '', role: '', monthly_cost: '' });
+        setNewMember({ name: '', role: '', monthly_cost: '', resource_type: 'fulltime' });
         fetchTeamData();
       }
     } catch (err) {
@@ -1936,9 +1936,22 @@ export default function CEOPage() {
                                 <tr key={member._id}>
                                   <td style={{ fontWeight: '700' }}>{member.name}</td>
                                   <td>
-                                    <span className="funnel-card-source" style={{ textTransform: 'capitalize', fontSize: '10px' }}>
-                                      {member.role}
-                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span className="funnel-card-source" style={{ textTransform: 'capitalize', fontSize: '10px', margin: 0 }}>
+                                        {member.role}
+                                      </span>
+                                      <span style={{ 
+                                        fontSize: '9px', 
+                                        backgroundColor: member.resource_type === 'fulltime' ? '#ecfdf5' : member.resource_type === 'freelancer' ? '#eff6ff' : '#fffbeb', 
+                                        color: member.resource_type === 'fulltime' ? '#065f46' : member.resource_type === 'freelancer' ? '#1d4ed8' : '#b45309',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontWeight: '700',
+                                        textTransform: 'uppercase'
+                                      }}>
+                                        {member.resource_type || 'fulltime'}
+                                      </span>
+                                    </div>
                                   </td>
                                   <td style={{ fontWeight: '600' }}>₹{member.monthly_cost?.toLocaleString()} / mo</td>
                                   <td>
@@ -2034,6 +2047,19 @@ export default function CEOPage() {
                         value={newMember.monthly_cost} onChange={e => setNewMember({ ...newMember, monthly_cost: e.target.value })}
                         style={{ padding: '8px 12px', fontSize: '12px' }}
                       />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontSize: '11px' }}>Resource / Engagement Type</label>
+                      <select 
+                        className="form-control" required
+                        value={newMember.resource_type || 'fulltime'} onChange={e => setNewMember({ ...newMember, resource_type: e.target.value })}
+                        style={{ padding: '8px 12px', fontSize: '12px', background: '#fff' }}
+                      >
+                        <option value="fulltime">Full-Time (Salaried)</option>
+                        <option value="freelancer">Freelancer</option>
+                        <option value="consultant">Consultant</option>
+                      </select>
                     </div>
 
                     <button type="submit" className="btn btn-primary" style={{ marginTop: '8px', padding: '8px', fontSize: '13px' }}>
