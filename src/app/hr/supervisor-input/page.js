@@ -179,7 +179,12 @@ export default function SupervisorInputReview() {
                                 <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{rec.employee?.designation} · {rec.employee?.type}</div>
                               </td>
                               <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '800', color: 'var(--primary)' }}>
-                                {rec.hours_worked} hrs
+                                {(() => {
+                                  const totalDec = rec.hours_worked || 0;
+                                  const h = Math.floor(totalDec);
+                                  const m = Math.round((totalDec - h) * 60);
+                                  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+                                })()}
                               </td>
                               <td style={{ padding: '8px 12px', color: 'var(--text-main)', fontWeight: '600' }}>
                                 {rec.project?.name || '—'}

@@ -9,7 +9,7 @@ export default function SupervisorPortal() {
   const [projects, setProjects] = useState([]);
   const [selectedSupervisor, setSelectedSupervisor] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [rows, setRows] = useState([]); // Array of { employeeId, hours_worked, projectId, notes }
+  const [rows, setRows] = useState([]); // Array of { employeeId, employeeName, designation, type, logs: [{ projectId, hours, minutes, notes }] }
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -34,15 +34,13 @@ export default function SupervisorPortal() {
         const dataProj = await resProj.json();
         setProjects(Array.isArray(dataProj) ? dataProj : []);
 
-        // Initialize rows for all employees
+        // Initialize rows for all employees with empty log arrays
         setRows(activeEmps.map(emp => ({
           employeeId: emp._id,
           employeeName: emp.name,
           designation: emp.designation,
           type: emp.type,
-          hours_worked: 0,
-          projectId: '',
-          notes: ''
+          logs: [{ projectId: '', hours: 0, minutes: 0, notes: '' }]
         })));
       } catch (err) {
         console.error(err);
@@ -53,10 +51,35 @@ export default function SupervisorPortal() {
     fetchData();
   }, []);
 
-  const handleRowChange = (index, field, value) => {
+  const handleLogChange = (empIdx, logIdx, field, value) => {
     setRows(prev => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
+      if (next[empIdx] && next[empIdx].logs[logIdx]) {
+        next[empIdx].logs[logIdx] = { ...next[empIdx].logs[logIdx], [field]: value };
+      }
+      return next;
+    });
+  };
+
+  const addLogLine = (empIdx) => {
+    setRows(prev => {
+      const next = [...prev];
+      if (next[empIdx]) {
+        next[empIdx].logs.push({ projectId: '', hours: 0, minutes: 0, notes: '' });
+      }
+      return next;
+    });
+  };
+
+  const removeLogLine = (empIdx, logIdx) => {
+    setRows(prev => {
+      const next = [...prev];
+      if (next[empIdx]) {
+        next[empIdx].logs = next[empIdx].logs.filter((_, idx) => idx !== logIdx);
+        if (next[empIdx].logs.length === 0) {
+          next[empIdx].logs = [{ projectId: '', hours: 0, minutes: 0, notes: '' }];
+        }
+      }
       return next;
     });
   };
@@ -68,9 +91,25 @@ export default function SupervisorPortal() {
       return;
     }
 
-    // Filter only records that have hours logged (> 0)
-    const activeRecords = rows.filter(r => parseFloat(r.hours_worked) > 0);
-    if (activeRecords.length === 0) {
+    // Convert logs to decimal hours and gather active records
+    const records = [];
+    rows.forEach(r => {
+      r.logs.forEach(log => {
+        const h = parseFloat(log.hours) || 0;
+        const m = parseFloat(log.minutes) || 0;
+        const dec = h + (m / 60);
+        if (dec > 0) {
+          records.push({
+            employeeId: r.employeeId,
+            projectId: log.projectId || null,
+            hours_worked: dec,
+            notes: log.notes || ''
+          });
+        }
+      });
+    });
+
+    if (records.length === 0) {
       alert('Please enter working hours for at least one employee.');
       return;
     }
@@ -85,14 +124,17 @@ export default function SupervisorPortal() {
         body: JSON.stringify({
           supervisor: selectedSupervisor,
           date,
-          records: activeRecords
+          records
         })
       });
       const data = await res.json();
       if (data.success) {
         setMessage({ type: 'success', text: 'Daily attendance log submitted successfully to HR console!' });
-        // Reset hours
-        setRows(prev => prev.map(r => ({ ...r, hours_worked: 0, projectId: '', notes: '' })));
+        // Reset logs
+        setRows(prev => prev.map(r => ({
+          ...r,
+          logs: [{ projectId: '', hours: 0, minutes: 0, notes: '' }]
+        })));
       } else {
         setMessage({ type: 'error', text: `Failed to submit log: ${data.error || 'Unknown error'}` });
       }
@@ -113,16 +155,16 @@ export default function SupervisorPortal() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ padding: '24px', maxWidth: '1050px', margin: '0 auto' }}>
       
       {/* Title Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: 'var(--text-main)' }}>
-            👷 Supervisor Daily Attendance Portal
+            👷 Supervisor Daily Attendance Portal (Hourly-Based)
           </h2>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Multiple supervisors can submit daily working hours directly from this panel
+            Enter hours and minutes worked per project/site. HR review console receives logs instantly.
           </p>
         </div>
         <Link href="/hr/supervisor-input" style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: '700', textDecoration: 'underline' }}>
@@ -180,67 +222,125 @@ export default function SupervisorPortal() {
           </div>
         </div>
 
-        {/* Employees Grid list */}
+        {/* Employees Table */}
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>
-            Employees & Freelancers Hours Input
+            Employees & Freelancers Hours & Project Allocations
           </label>
           <div style={{ border: '1px solid var(--card-border)', borderRadius: '12px', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: '#f9fafb', borderBottom: '1px solid var(--card-border)' }}>
                   <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '700' }}>Employee / Freelancer</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '700', width: '100px', textAlign: 'center' }}>Hours</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '700', width: '220px' }}>Assign Project (Site)</th>
-                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '700' }}>Tasks / Notes</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '700' }}>Logged Hours & Project Details</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={row.employeeId} style={{ borderBottom: idx < rows.length - 1 ? '1px solid #f1f5f9' : 'none', background: row.hours_worked > 0 ? 'rgba(var(--primary-rgb), 0.03)' : 'transparent' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--text-main)' }}>{row.employeeName}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {row.designation} · <span style={{ textTransform: 'capitalize', fontWeight: '600' }}>{row.type}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        max="24"
-                        step="0.5"
-                        value={row.hours_worked === 0 ? '' : row.hours_worked}
-                        placeholder="0"
-                        onChange={e => handleRowChange(idx, 'hours_worked', parseFloat(e.target.value) || 0)}
-                        style={{ width: '70px', padding: '6px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', outline: 'none' }}
-                      />
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <select
-                        value={row.projectId}
-                        disabled={row.hours_worked === 0}
-                        onChange={e => handleRowChange(idx, 'projectId', e.target.value)}
-                        style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: row.hours_worked === 0 ? '#f3f4f6' : '#fff' }}
-                      >
-                        <option value="">-- General --</option>
-                        {projects.map(p => (
-                          <option key={p._id} value={p._id}>{p.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <input
-                        type="text"
-                        placeholder="E.g. Plastering work, framing drafts"
-                        value={row.notes}
-                        disabled={row.hours_worked === 0}
-                        onChange={e => handleRowChange(idx, 'notes', e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: row.hours_worked === 0 ? '#f3f4f6' : '#fff' }}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row, empIdx) => {
+                  const hasHours = row.logs.some(l => (parseFloat(l.hours) || 0) > 0 || (parseFloat(l.minutes) || 0) > 0);
+                  
+                  return (
+                    <tr key={row.employeeId} style={{ borderBottom: empIdx < rows.length - 1 ? '1px solid #f1f5f9' : 'none', background: hasHours ? 'rgba(var(--primary-rgb), 0.02)' : 'transparent' }}>
+                      
+                      {/* Left: Employee Info */}
+                      <td style={{ padding: '16px', width: '250px', verticalAlign: 'top' }}>
+                        <div style={{ fontWeight: '700', color: 'var(--text-main)' }}>{row.employeeName}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {row.designation} · <span style={{ textTransform: 'capitalize', fontWeight: '700' }}>{row.type}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => addLogLine(empIdx)}
+                          style={{
+                            background: 'none', border: 'none', color: 'var(--primary)',
+                            fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+                            marginTop: '10px', padding: 0, display: 'flex', alignItems: 'center', gap: '4px'
+                          }}
+                        >
+                          ➕ Add Project Log
+                        </button>
+                      </td>
+
+                      {/* Right: Project/Hours Log rows */}
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {row.logs.map((log, logIdx) => (
+                            <div key={logIdx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 85px 85px 1.6fr 35px', gap: '8px', alignItems: 'center' }}>
+                              
+                              {/* Project dropdown select */}
+                              <div>
+                                <select
+                                  value={log.projectId}
+                                  onChange={e => handleLogChange(empIdx, logIdx, 'projectId', e.target.value)}
+                                  style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: '#fff' }}
+                                >
+                                  <option value="">-- General / Office --</option>
+                                  {projects.map(p => (
+                                    <option key={p._id} value={p._id}>{p.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Hours */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  placeholder="Hrs"
+                                  min="0"
+                                  max="24"
+                                  value={log.hours === 0 ? '' : log.hours}
+                                  onChange={e => handleLogChange(empIdx, logIdx, 'hours', parseInt(e.target.value) || 0)}
+                                  style={{ width: '100%', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', outline: 'none' }}
+                                />
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>h</span>
+                              </div>
+
+                              {/* Minutes */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  placeholder="Mins"
+                                  min="0"
+                                  max="59"
+                                  step="5"
+                                  value={log.minutes === 0 ? '' : log.minutes}
+                                  onChange={e => handleLogChange(empIdx, logIdx, 'minutes', parseInt(e.target.value) || 0)}
+                                  style={{ width: '100%', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', textAlign: 'center', fontWeight: '700', outline: 'none' }}
+                                />
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>m</span>
+                              </div>
+
+                              {/* Notes */}
+                              <div>
+                                <input
+                                  type="text"
+                                  placeholder="Work performed description..."
+                                  value={log.notes}
+                                  onChange={e => handleLogChange(empIdx, logIdx, 'notes', e.target.value)}
+                                  style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                                />
+                              </div>
+
+                              {/* Delete button */}
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeLogLine(empIdx, logIdx)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', display: 'block', margin: '0 auto' }}
+                                  title="Delete entry line"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -264,7 +364,7 @@ export default function SupervisorPortal() {
               boxShadow: 'var(--shadow-sm)'
             }}
           >
-            {submitting ? 'Submitting Log...' : '🚀 Submit Attendance Input'}
+            {submitting ? 'Submitting Sheets...' : '🚀 Submit Daily Logs'}
           </button>
         </div>
 
