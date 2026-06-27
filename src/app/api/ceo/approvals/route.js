@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/dbConnect';
-import { MaterialTransaction, MaterialStock, Employee, Design, Installation, Manufacturing, QC, Logistics } from '@/lib/models';
+import { MaterialTransaction, MaterialStock, Employee, Design, Installation, Manufacturing, QC, Logistics, WorkLog, Expense } from '@/lib/models';
 
 export async function GET(request) {
   try {
@@ -36,6 +36,11 @@ export async function GET(request) {
       })
       .sort({ createdAt: -1 });
 
+    const worklogs = await WorkLog.find({ approval_status: 'pending' })
+      .populate('employee')
+      .populate('project')
+      .sort({ date: -1 });
+
     // Separate purchases and stock logs
     const purchases = transactions.filter(t => t.transaction_type === 'purchase');
     const stock = transactions.filter(t => t.transaction_type !== 'purchase');
@@ -48,7 +53,8 @@ export async function GET(request) {
       installation: installations,
       manufacturing,
       qc,
-      logistics
+      logistics,
+      worklogs
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
@@ -195,6 +201,36 @@ export async function PUT(request) {
       }
       await logistics.save();
       return Response.json({ success: true, record: logistics });
+    }
+
+    if (module === 'worklog') {
+      const log = await WorkLog.findById(id).populate('employee');
+      if (!log) return Response.json({ error: 'Work log not found' }, { status: 404 });
+
+      log.approval_status = status;
+      log.approval_notes = notes || '';
+      await log.save();
+
+      // If approved and linked to a project, create an Expense!
+      if (status === 'approved' && log.project) {
+        const rateType = log.employee?.rate_type || 'hourly';
+        let hourlyRate = log.employee?.basic_salary || 0;
+        if (rateType === 'monthly') {
+          hourlyRate = Math.round(hourlyRate / 160);
+        }
+        const costAmount = Math.round(log.hours_worked * hourlyRate);
+
+        if (costAmount > 0) {
+          await Expense.create({
+            category: 'project_cost',
+            amount: costAmount,
+            expense_date: log.date,
+            project: log.project,
+            description: `Freelancer Cost: ${log.employee?.name || 'Freelancer'} (${log.hours_worked} hrs @ ₹${hourlyRate}/hr)`
+          });
+        }
+      }
+      return Response.json({ success: true, record: log });
     }
 
     return Response.json({ error: 'Invalid module specified' }, { status: 400 });

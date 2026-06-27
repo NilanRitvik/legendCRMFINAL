@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/dbConnect';
-import { WorkLog, Attendance } from '@/lib/models';
+import { WorkLog, Attendance, Project } from '@/lib/models';
 
 function getWorkingDaysInMonth(m, y) {
   let count = 0;
@@ -81,8 +81,22 @@ export async function POST(request) {
         date: parsedDate,
         project: r.projectId || null,
         hours_worked: parseFloat(r.hours_worked) || 0,
-        description: r.description || ''
+        description: r.description || '',
+        approval_status: 'pending'
       });
+
+      // Automatically add freelancer to project team allocation if they are not already allocated
+      if (r.projectId) {
+        const project = await Project.findById(r.projectId);
+        if (project) {
+          const isAllocated = project.team && project.team.some(t => t.member && t.member.toString() === r.employeeId);
+          if (!isAllocated) {
+            project.team = project.team || [];
+            project.team.push({ member: r.employeeId, allocation: 100 });
+            await project.save();
+          }
+        }
+      }
     }
   }
 

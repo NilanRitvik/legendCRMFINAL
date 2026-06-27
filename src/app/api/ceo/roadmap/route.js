@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/dbConnect';
-import { Client, Quotation, Project, Invoice, Payment, MaterialTransaction, Installation, Design, Employee, Manufacturing, QC, Logistics, Expense } from '@/lib/models';
+import { Client, Quotation, Project, Invoice, Payment, MaterialTransaction, Installation, Design, Employee, Manufacturing, QC, Logistics, Expense, WorkLog } from '@/lib/models';
 
 export async function GET(request) {
   try {
@@ -404,6 +404,7 @@ export async function GET(request) {
     const pendingManufacturing = await Manufacturing.find({ approval_status: 'pending' }).populate('project').sort({ createdAt: -1 });
     const pendingQC = await QC.find({ approval_status: 'pending' }).populate('project').sort({ createdAt: -1 });
     const pendingLogistics = await Logistics.find({ approval_status: 'pending' }).populate('project').sort({ createdAt: -1 });
+    const pendingWorkLogs = await WorkLog.find({ approval_status: 'pending' }).sort({ createdAt: -1 });
 
     const totalApprovalsCount = 
       pendingHiring.length + 
@@ -413,7 +414,8 @@ export async function GET(request) {
       pendingInstallations.length +
       pendingManufacturing.length +
       pendingQC.length +
-      pendingLogistics.length;
+      pendingLogistics.length +
+      pendingWorkLogs.length;
 
     // Generate Smart Analysis insights based on DB state
     const insights = [];
@@ -475,7 +477,8 @@ export async function GET(request) {
           installation: pendingInstallations,
           manufacturing: pendingManufacturing,
           qc: pendingQC,
-          logistics: pendingLogistics
+          logistics: pendingLogistics,
+          worklog: pendingWorkLogs
         }
       }
     });

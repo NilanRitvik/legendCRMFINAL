@@ -756,6 +756,9 @@ export default function CEOPage() {
   };
 
   const getActiveList = () => {
+    if (activeApprovalTab === 'worklog') {
+      return approvals.worklogs || [];
+    }
     return approvals[activeApprovalTab] || [];
   };
 
@@ -1499,6 +1502,7 @@ export default function CEOPage() {
                 { k: 'manufacturing', l: '🏭 Production', count: approvals.manufacturing?.length || 0, bg: '#e0f2fe', color: '#0369a1' },
                 { k: 'qc', l: '🔍 QC Clearance', count: approvals.qc?.length || 0, bg: '#dcfce7', color: '#15803d' },
                 { k: 'logistics', l: '🚚 Logistics', count: approvals.logistics?.length || 0, bg: '#faf5ff', color: '#6b21a8' },
+                { k: 'worklog', l: '⏱️ Freelancer Logs', count: approvals.worklogs?.length || 0, bg: '#fff1f2', color: '#e11d48' },
               ].map(t => (
                 <button
                   key={t.k}
@@ -1617,6 +1621,18 @@ export default function CEOPage() {
                         ['Driver Details', item.driver],
                         ['Dispatch Time', `${item.date ? new Date(item.date).toLocaleDateString('en-IN') : 'N/A'} ${item.time || ''}`],
                         ['Est. Distance', `${item.distance} km`]
+                      ];
+                    } else if (activeApprovalTab === 'worklog') {
+                      cardTitle = `Freelancer Work Log: ${item.employee?.name || 'Freelancer'}`;
+                      const rate = item.employee?.basic_salary || 0;
+                      const totalCost = Math.round(item.hours_worked * rate);
+                      detailsGrid = [
+                        ['Project Name', item.project?.name || 'General / Non-Project'],
+                        ['Hours Worked', `${item.hours_worked} hrs`],
+                        ['Hourly Rate', `₹${rate.toLocaleString()}/hr`],
+                        ['Calculated Cost', `₹${totalCost.toLocaleString()}`],
+                        ['Date Logged', new Date(item.date).toLocaleDateString('en-IN')],
+                        ['Task Performed', item.description || '—']
                       ];
                     }
 
@@ -2692,9 +2708,9 @@ Register Asset & Auto-Log Expense
                   style={{ color: wakeUpTab === 'approvals' ? 'var(--primary)' : 'rgba(255,255,255,0.65)' }}
                 >
                   ✅ Pending Approvals
-                  {(smartAnalysis.pendingApprovals.finance.length + smartAnalysis.pendingApprovals.stock.length + smartAnalysis.pendingApprovals.hr.length + (smartAnalysis.pendingApprovals.manufacturing?.length || 0) + (smartAnalysis.pendingApprovals.qc?.length || 0) + (smartAnalysis.pendingApprovals.logistics?.length || 0) + smartAnalysis.pendingApprovals.installation.length) > 0 && (
+                  {(smartAnalysis.pendingApprovals.finance.length + smartAnalysis.pendingApprovals.stock.length + smartAnalysis.pendingApprovals.hr.length + (smartAnalysis.pendingApprovals.manufacturing?.length || 0) + (smartAnalysis.pendingApprovals.qc?.length || 0) + (smartAnalysis.pendingApprovals.logistics?.length || 0) + (smartAnalysis.pendingApprovals.worklog?.length || 0) + smartAnalysis.pendingApprovals.installation.length) > 0 && (
                     <span style={{ marginLeft: '6px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '800' }}>
-                      {smartAnalysis.pendingApprovals.finance.length + smartAnalysis.pendingApprovals.stock.length + smartAnalysis.pendingApprovals.hr.length + (smartAnalysis.pendingApprovals.manufacturing?.length || 0) + (smartAnalysis.pendingApprovals.qc?.length || 0) + (smartAnalysis.pendingApprovals.logistics?.length || 0) + smartAnalysis.pendingApprovals.installation.length}
+                      {smartAnalysis.pendingApprovals.finance.length + smartAnalysis.pendingApprovals.stock.length + smartAnalysis.pendingApprovals.hr.length + (smartAnalysis.pendingApprovals.manufacturing?.length || 0) + (smartAnalysis.pendingApprovals.qc?.length || 0) + (smartAnalysis.pendingApprovals.logistics?.length || 0) + (smartAnalysis.pendingApprovals.worklog?.length || 0) + smartAnalysis.pendingApprovals.installation.length}
                     </span>
                   )}
                 </button>
@@ -2938,6 +2954,7 @@ Register Asset & Auto-Log Expense
                         { icon: '🔍', label: 'Quality Control (QC) Sign-offs', count: smartAnalysis.pendingApprovals.qc?.length || 0, color: '#15803d' },
                         { icon: '🚚', label: 'Cargo Dispatch Logistics Releases', count: smartAnalysis.pendingApprovals.logistics?.length || 0, color: '#6b21a8' },
                         { icon: '🔧', label: 'Site Installation Clearances', count: smartAnalysis.pendingApprovals.installation.length, color: '#ea580c' },
+                        { icon: '⏱️', label: 'Freelancer Work Logs', count: smartAnalysis.pendingApprovals.worklog?.length || 0, color: '#e11d48' },
                       ].map(({ icon, label, count, color }) => (
                         <div key={label} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',

@@ -556,7 +556,9 @@ const WorkLogSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   hours_worked: { type: Number, required: true, default: 0 },
   description: { type: String, default: '' },
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null }
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null },
+  approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  approval_notes: { type: String, default: '' }
 }, { timestamps: true });
 
 WorkLogSchema.index({ employee: 1, date: 1 });
