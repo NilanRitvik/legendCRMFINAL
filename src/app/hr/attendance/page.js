@@ -45,6 +45,7 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState({}); // { [empId]: { total_working_days, present_days, half_days, late_days, overtime_hours, notes } }
   const [loadingMonthly, setLoadingMonthly] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [projects, setProjects] = useState([]);
 
   const getDaysInMonth = (m, y) => new Date(y, m, 0).getDate();
   const daysCount = getDaysInMonth(month, year);
@@ -77,21 +78,26 @@ export default function AttendancePage() {
     return true;
   };
 
-  // 1. Initial load of active employees
+  // 1. Initial load of active employees and projects
   useEffect(() => {
-    const loadEmps = async () => {
+    const loadData = async () => {
       setLoading(true);
       try {
-        const er = await fetch('/api/hr/employees?status=active');
-        const emps = await er.json();
+        const [resEmps, resProjs] = await Promise.all([
+          fetch('/api/hr/employees?status=active'),
+          fetch('/api/projects')
+        ]);
+        const emps = await resEmps.json();
+        const projs = await resProjs.json();
         setEmployees(Array.isArray(emps) ? emps.filter(e => e.status === 'active') : []);
+        setProjects(Array.isArray(projs) ? projs : []);
       } catch (e) {
         console.error(e);
       } finally {
         setLoading(false);
       }
     };
-    loadEmps();
+    loadData();
   }, []);
 
   // 2. Load daily attendance when employees or dailyDate changes
@@ -132,11 +138,15 @@ export default function AttendancePage() {
         const logRecords = await res.json();
         const logsMap = {};
         employees.filter(e => e.type !== 'employee').forEach(emp => {
-          const existing = Array.isArray(logRecords) ? logRecords.find(r => r.employee === emp._id) : null;
-          logsMap[emp._id] = {
-            hours_worked: existing?.hours_worked ?? 0,
-            description: existing?.description ?? ''
-          };
+          const matching = Array.isArray(logRecords) ? logRecords.filter(r => (r.employee?._id || r.employee) === emp._id) : [];
+          logsMap[emp._id] = matching.length > 0 
+            ? matching.map(r => ({
+                projectId: r.project?._id || r.project || '',
+                projectName: r.project?.name || '',
+                hours_worked: r.hours_worked || 0,
+                description: r.description || ''
+              }))
+            : [{ projectId: '', hours_worked: 0, description: '' }];
         });
         setDailyWorkLogs(logsMap);
       } catch (err) {
@@ -183,7 +193,7 @@ export default function AttendancePage() {
           const empId = r.employee?._id || r.employee;
           if (workGrid[empId]) {
             const dayNum = new Date(r.date).getUTCDate();
-            workGrid[empId][dayNum] = r.hours_worked;
+            workGrid[empId][dayNum] = (workGrid[empId][dayNum] || 0) + (r.hours_worked || 0);
           }
         });
       }
@@ -243,8 +253,31 @@ export default function AttendancePage() {
     setDailyAttendance(prev => ({ ...prev, [empId]: { ...prev[empId], [field]: value } }));
   };
 
-  const updateWorkLogField = (empId, field, value) => {
-    setDailyWorkLogs(prev => ({ ...prev, [empId]: { ...prev[empId], [field]: value } }));
+  const updateWorkLogField = (empId, index, field, value) => {
+    setDailyWorkLogs(prev => {
+      const logs = [...(prev[empId] || [])];
+      if (logs[index]) {
+        logs[index] = { ...logs[index], [field]: value };
+      }
+      return { ...prev, [empId]: logs };
+    });
+  };
+
+  const addWorkLogEntry = (empId) => {
+    setDailyWorkLogs(prev => ({
+      ...prev,
+      [empId]: [...(prev[empId] || []), { projectId: '', hours_worked: 0, description: '' }]
+    }));
+  };
+
+  const removeWorkLogEntry = (empId, index) => {
+    setDailyWorkLogs(prev => {
+      const logs = (prev[empId] || []).filter((_, idx) => idx !== index);
+      return { 
+        ...prev, 
+        [empId]: logs.length > 0 ? logs : [{ projectId: '', hours_worked: 0, description: '' }] 
+      };
+    });
   };
 
   const updateMonthlyField = (empId, field, value) => {
@@ -412,11 +445,20 @@ export default function AttendancePage() {
   const saveWorkLogs = async () => {
     setSaving(true);
     try {
-      const flRecords = Object.keys(dailyWorkLogs).map(empId => ({
-        employeeId: empId,
-        hours_worked: dailyWorkLogs[empId].hours_worked,
-        description: dailyWorkLogs[empId].description
-      }));
+      const flRecords = [];
+      Object.keys(dailyWorkLogs).forEach(empId => {
+        const entries = dailyWorkLogs[empId] || [];
+        entries.forEach(entry => {
+          if (parseFloat(entry.hours_worked) > 0) {
+            flRecords.push({
+              employeeId: empId,
+              projectId: entry.projectId || null,
+              hours_worked: parseFloat(entry.hours_worked) || 0,
+              description: entry.description || ''
+            });
+          }
+        });
+      });
 
       await fetch('/api/hr/attendance/worklogs', {
         method: 'POST',
@@ -425,8 +467,10 @@ export default function AttendancePage() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      setRefreshTrigger(prev => prev + 1);
     } catch (e) {
       console.error(e);
+      alert('Failed to save work logs');
     } finally {
       setSaving(false);
     }
@@ -745,10 +789,10 @@ export default function AttendancePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '800px' }}>
                 <thead>
                   <tr style={{ background: 'var(--card-bg)' }}>
-                    {['#', 'Freelancer / Consultant', 'Billing Type', 'Hours Performed', 'Work Performed / Tasks Completed'].map((h, i) => (
+                    {['#', 'Freelancer / Consultant', 'Billing Type', 'Project / Site Name', 'Hours Performed', 'Work Performed / Tasks Completed', 'Actions'].map((h, i) => (
                       <th key={h} style={{ 
                         padding: '12px 10px', 
-                        textAlign: i === 1 || i === 4 ? 'left' : 'center', 
+                        textAlign: i === 1 || i === 5 ? 'left' : 'center', 
                         fontWeight: '700', 
                         color: 'var(--text-muted)', 
                         fontSize: '11px', 
@@ -760,52 +804,111 @@ export default function AttendancePage() {
                 </thead>
                 <tbody>
                   {filteredEmp.filter(e => e.type !== 'employee').map((emp, idx) => {
-                    const rec = dailyWorkLogs[emp._id] || { hours_worked: 0, description: '' };
-                    return (
-                      <tr key={emp._id} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>{idx + 1}</td>
-                        <td style={{ padding: '12px 14px' }}>
-                          <div style={{ fontWeight: '700', color: 'var(--text-main)' }}>{emp.name}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.designation} · {emp.department}</div>
+                    const logs = dailyWorkLogs[emp._id] || [{ projectId: '', hours_worked: 0, description: '' }];
+                    const editable = isDateEditable(workLogDate);
+                    
+                    return logs.map((log, logIdx) => (
+                      <tr key={`${emp._id}-${logIdx}`} style={{ borderBottom: logIdx === logs.length - 1 ? '1.5px solid var(--card-border)' : '1px solid #f1f5f9' }}>
+                        {logIdx === 0 && (
+                          <>
+                            <td rowSpan={logs.length} style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px', verticalAlign: 'top', background: '#fff' }}>
+                              {idx + 1}
+                            </td>
+                            <td rowSpan={logs.length} style={{ padding: '12px 14px', verticalAlign: 'top', background: '#fff' }}>
+                              <div style={{ fontWeight: '700', color: 'var(--text-main)' }}>{emp.name}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>{emp.designation} · {emp.department}</div>
+                              {editable && (
+                                <button 
+                                  onClick={() => addWorkLogEntry(emp._id)}
+                                  style={{ 
+                                    background: 'none', border: 'none', color: 'var(--primary)', 
+                                    fontSize: '11px', fontWeight: '700', cursor: 'pointer', padding: 0,
+                                    display: 'flex', alignItems: 'center', gap: '4px' 
+                                  }}
+                                >
+                                  ➕ Add Project Log
+                                </button>
+                              )}
+                            </td>
+                            <td rowSpan={logs.length} style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '600', color: '#8b5cf6', verticalAlign: 'top', background: '#fff' }}>
+                              {emp.rate_type?.toUpperCase()} (₹{emp.basic_salary}/{emp.rate_type === 'hourly' ? 'hr' : 'proj'})
+                            </td>
+                          </>
+                        )}
+                        
+                        {/* Project selector column */}
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <select
+                            value={log.projectId || ''}
+                            disabled={!editable}
+                            onChange={e => updateWorkLogField(emp._id, logIdx, 'projectId', e.target.value)}
+                            style={{ 
+                              width: '100%', minWidth: '160px', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', 
+                              fontSize: '12px', background: '#fff', color: 'var(--text-main)', outline: 'none',
+                              cursor: editable ? 'pointer' : 'not-allowed'
+                            }}
+                          >
+                            <option value="">-- General / Non-Project --</option>
+                            {projects.map(p => (
+                              <option key={p._id} value={p._id}>{p.name} ({p.client?.name || 'No Client'})</option>
+                            ))}
+                          </select>
                         </td>
-                        <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: '600', color: '#8b5cf6' }}>
-                          {emp.rate_type?.toUpperCase()} (₹{emp.basic_salary}/{emp.rate_type === 'hourly' ? 'hr' : 'proj'})
-                        </td>
-                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        
+                        {/* Hours Column */}
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                           <input 
                             type="number" min="0" max="24" step="0.5"
-                            value={rec.hours_worked}
-                            disabled={!isDateEditable(workLogDate)}
-                            onChange={e => updateWorkLogField(emp._id, 'hours_worked', e.target.value)}
+                            value={log.hours_worked}
+                            disabled={!editable}
+                            onChange={e => updateWorkLogField(emp._id, logIdx, 'hours_worked', e.target.value)}
                             style={{ 
                               width: '70px', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', 
                               textAlign: 'center', fontSize: '13px', fontWeight: '700', outline: 'none', 
                               background: '#fafafa', color: 'var(--text-main)',
-                              cursor: isDateEditable(workLogDate) ? 'text' : 'not-allowed',
-                              opacity: isDateEditable(workLogDate) ? 1 : 0.7
+                              cursor: editable ? 'text' : 'not-allowed',
+                              opacity: editable ? 1 : 0.7
                             }}
                           />
                         </td>
-                        <td style={{ padding: '12px 14px' }}>
+                        
+                        {/* Tasks/Description Column */}
+                        <td style={{ padding: '8px 10px' }}>
                           <input 
-                            type="text" placeholder="E.g. Completed bedroom furniture 3D renders, site wiring layout, etc."
-                            value={rec.description}
-                            disabled={!isDateEditable(workLogDate)}
-                            onChange={e => updateWorkLogField(emp._id, 'description', e.target.value)}
+                            type="text" placeholder="E.g. Completed bedroom 3D layouts, site wiring design, etc."
+                            value={log.description}
+                            disabled={!editable}
+                            onChange={e => updateWorkLogField(emp._id, logIdx, 'description', e.target.value)}
                             style={{ 
                               width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', 
                               fontSize: '12px', outline: 'none', background: '#fafafa', color: 'var(--text-main)',
-                              cursor: isDateEditable(workLogDate) ? 'text' : 'not-allowed',
-                              opacity: isDateEditable(workLogDate) ? 1 : 0.7
+                              cursor: editable ? 'text' : 'not-allowed',
+                              opacity: editable ? 1 : 0.7
                             }}
                           />
                         </td>
+
+                        {/* Action Column */}
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          {editable && (logs.length > 1 || log.projectId || log.hours_worked > 0 || log.description) && (
+                            <button
+                              onClick={() => removeWorkLogEntry(emp._id, logIdx)}
+                              title="Delete this entry"
+                              style={{
+                                background: 'none', border: 'none', color: '#ef4444', 
+                                fontSize: '14px', cursor: 'pointer', padding: '4px'
+                              }}
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </td>
                       </tr>
-                    );
+                    ));
                   })}
                   {employees.filter(e => e.type !== 'employee').length === 0 && (
                     <tr>
-                      <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                         No freelancers found. Add active consultants under HR Employees menu.
                       </td>
                     </tr>

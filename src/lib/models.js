@@ -534,19 +534,26 @@ const DailyAttendanceSchema = new mongoose.Schema({
 
 DailyAttendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
 
-export const DailyAttendance = createModelProxy('DailyAttendance', mongoose.models.DailyAttendance || mongoose.model('DailyAttendance', DailyAttendanceSchema));
+if (mongoose.models.DailyAttendance) {
+  delete mongoose.models.DailyAttendance;
+}
+export const DailyAttendance = createModelProxy('DailyAttendance', mongoose.model('DailyAttendance', DailyAttendanceSchema));
 
 // 27. Work Log Schema (Freelancers hourly tracking)
 const WorkLogSchema = new mongoose.Schema({
   employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
   date: { type: Date, required: true },
   hours_worked: { type: Number, required: true, default: 0 },
-  description: { type: String, default: '' }
+  description: { type: String, default: '' },
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null }
 }, { timestamps: true });
 
-WorkLogSchema.index({ employee: 1, date: 1 }, { unique: true });
+WorkLogSchema.index({ employee: 1, date: 1 });
 
-export const WorkLog = createModelProxy('WorkLog', mongoose.models.WorkLog || mongoose.model('WorkLog', WorkLogSchema));
+if (mongoose.models.WorkLog) {
+  delete mongoose.models.WorkLog;
+}
+export const WorkLog = createModelProxy('WorkLog', mongoose.model('WorkLog', WorkLogSchema));
 
 
 

@@ -37,7 +37,9 @@ export async function GET(request) {
     return Response.json({ error: 'Missing query parameters. Provide date OR (month AND year).' }, { status: 400 });
   }
 
-  const records = await WorkLog.find(filter).sort({ date: 1 });
+  const records = await WorkLog.find(filter)
+    .populate('project', 'name client_name')
+    .sort({ date: 1 });
   return Response.json(records);
 }
 
@@ -67,18 +69,21 @@ export async function POST(request) {
   const year = parsedDate.getUTCFullYear();
   const month = parsedDate.getUTCMonth() + 1;
 
-  // 1. Save all daily work log records
+  // 1. Delete all existing work logs for the affected freelancers on this date
+  const employeeIds = [...new Set(records.map(r => r.employeeId))];
+  await WorkLog.deleteMany({ date: parsedDate, employee: { $in: employeeIds } });
+
+  // 2. Save all daily work log records
   for (const r of records) {
-    await WorkLog.findOneAndUpdate(
-      { employee: r.employeeId, date: parsedDate },
-      { 
-        employee: r.employeeId, 
-        date: parsedDate, 
-        hours_worked: parseFloat(r.hours_worked) || 0, 
-        description: r.description || '' 
-      },
-      { upsert: true, new: true }
-    );
+    if ((parseFloat(r.hours_worked) || 0) > 0) {
+      await WorkLog.create({
+        employee: r.employeeId,
+        date: parsedDate,
+        project: r.projectId || null,
+        hours_worked: parseFloat(r.hours_worked) || 0,
+        description: r.description || ''
+      });
+    }
   }
 
   // 2. Aggregate monthly attendance summaries for affected freelancers
