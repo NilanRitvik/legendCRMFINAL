@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/dbConnect';
-import { SupervisorInput, WorkLog, DailyAttendance, Attendance, Employee, Project, Expense } from '@/lib/models';
+import { SupervisorInput, WorkLog, DailyAttendance, Attendance, Employee, Project, Expense, SupervisorNotification } from '@/lib/models';
 
 function getWorkingDaysInMonth(m, y) {
   let count = 0;
@@ -145,6 +145,42 @@ export async function PUT(request) {
     const inputLog = await SupervisorInput.findById(id).populate('records.employee');
     if (!inputLog) {
       return Response.json({ error: 'Supervisor log not found' }, { status: 404 });
+    }
+
+    // Process edits to hours if records are provided in the body
+    if (body.records && Array.isArray(body.records)) {
+      const changes = [];
+      const logDateStr = new Date(inputLog.date).toLocaleDateString('en-IN');
+
+      body.records.forEach(newRec => {
+        const matchingIndex = inputLog.records.findIndex(r => r.employee && r.employee._id.toString() === newRec.employeeId);
+        if (matchingIndex !== -1) {
+          const oldRec = inputLog.records[matchingIndex];
+          const oldHours = oldRec.hours_worked;
+          const newHours = parseFloat(newRec.hours_worked) || 0;
+
+          if (oldHours !== newHours) {
+            oldRec.hours_worked = newHours;
+            const empName = oldRec.employee?.name || 'Staff';
+            changes.push(`${empName} (${oldHours}h ➡️ ${newHours}h)`);
+          }
+          if (newRec.notes !== undefined) {
+            oldRec.notes = newRec.notes;
+          }
+          if (newRec.projectId !== undefined) {
+            oldRec.project = newRec.projectId || null;
+          }
+        }
+      });
+
+      // Save Supervisor Notification if changes occurred
+      if (changes.length > 0) {
+        const msg = `HR edited hours for log on ${logDateStr}: ${changes.join(', ')}.`;
+        await SupervisorNotification.create({
+          supervisor: inputLog.supervisor,
+          message: msg
+        });
+      }
     }
 
     inputLog.status = status;

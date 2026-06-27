@@ -587,6 +587,18 @@ if (mongoose.models.SupervisorInput) {
 }
 export const SupervisorInput = createModelProxy('SupervisorInput', mongoose.model('SupervisorInput', SupervisorInputSchema));
 
+// 29. Supervisor Notification Schema
+const SupervisorNotificationSchema = new mongoose.Schema({
+  supervisor: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+  message: { type: String, required: true },
+  read: { type: Boolean, default: false }
+}, { timestamps: true });
+
+if (mongoose.models.SupervisorNotification) {
+  delete mongoose.models.SupervisorNotification;
+}
+export const SupervisorNotification = createModelProxy('SupervisorNotification', mongoose.model('SupervisorNotification', SupervisorNotificationSchema));
+
 
 
 
