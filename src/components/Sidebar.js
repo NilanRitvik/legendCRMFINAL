@@ -15,6 +15,7 @@ const ALL_PAGES = [
 const RAW_MENU = [
   { type: 'item', name: 'Dashboard',             path: '/',                   icon: '📊', key: 'dashboard' },
   { type: 'item', name: 'CEO Console',           path: '/ceo',                icon: '👑', key: 'ceo' },
+  { type: 'item', name: 'Supervisor Portal',     path: '/supervisor',         icon: '👷', key: 'dashboard' },
   { type: 'item', name: 'Sales Pipeline',         path: '/clients',            icon: '👥', key: 'clients' },
   { type: 'item', name: '2D & 3D Designs',        path: '/designing',          icon: '🎨', key: 'designing' },
   { type: 'item', name: 'Purchase & Stock',       path: '/purchase',           icon: '🛒', key: 'purchase' },
@@ -33,6 +34,7 @@ const RAW_MENU = [
   { type: 'item', name: 'Employees',              path: '/hr/employees',       icon: '👨‍💼', key: 'hr-employees' },
   { type: 'item', name: 'Leave Management',       path: '/hr/leaves',          icon: '🏖️', key: 'hr-leaves' },
   { type: 'item', name: 'Attendance',             path: '/hr/attendance',      icon: '✅', key: 'hr-attendance' },
+  { type: 'item', name: 'Supervisor Logs',        path: '/hr/supervisor-input', icon: '📋', key: 'hr-attendance' },
   { type: 'item', name: 'Payroll',                path: '/hr/payroll',         icon: '💵', key: 'hr-payroll' },
 ];
 

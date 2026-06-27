@@ -568,6 +568,25 @@ if (mongoose.models.WorkLog) {
 }
 export const WorkLog = createModelProxy('WorkLog', mongoose.model('WorkLog', WorkLogSchema));
 
+// 28. Supervisor Input Schema
+const SupervisorInputSchema = new mongoose.Schema({
+  supervisor: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+  date: { type: Date, required: true },
+  records: [{
+    employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+    hours_worked: { type: Number, required: true, default: 0 },
+    project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null },
+    notes: { type: String, default: '' }
+  }],
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  approval_notes: { type: String, default: '' }
+}, { timestamps: true });
+
+if (mongoose.models.SupervisorInput) {
+  delete mongoose.models.SupervisorInput;
+}
+export const SupervisorInput = createModelProxy('SupervisorInput', mongoose.model('SupervisorInput', SupervisorInputSchema));
+
 
 
 
