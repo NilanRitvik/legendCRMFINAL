@@ -61,6 +61,22 @@ export default function AttendancePage() {
   };
   const defaultWorkingDays = workingDaysInMonth(month, year);
 
+  const isDateEditable = (dateString) => {
+    if (!dateString) return false;
+    const targetDate = new Date(dateString + 'T00:00:00.000Z');
+    const now = new Date();
+    
+    // Check older than 48 hours
+    const diffMs = now.getTime() - targetDate.getTime();
+    if (diffMs > 48 * 60 * 60 * 1000) return false;
+    
+    // Check future dates (compared to local date midnight to allow marking today)
+    const todayMidnight = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+    if (targetDate.getTime() > todayMidnight.getTime()) return false;
+    
+    return true;
+  };
+
   // 1. Initial load of active employees
   useEffect(() => {
     const loadEmps = async () => {
@@ -454,6 +470,9 @@ export default function AttendancePage() {
   };
 
   const getGridCellDisplay = (emp, dayNum) => {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const editable = isDateEditable(dateStr);
+
     if (emp.type === 'employee') {
       const status = gridDailyData[emp._id]?.[dayNum] || 'unmarked';
       const styles = {
@@ -466,17 +485,19 @@ export default function AttendancePage() {
       const info = styles[status] || styles.unmarked;
       return (
         <div 
-          onClick={() => cycleGridStatus(emp._id, dayNum)}
-          title={`Click to cycle status. Current: ${status.toUpperCase()}`}
+          onClick={() => editable && cycleGridStatus(emp._id, dayNum)}
+          title={editable ? `Click to cycle status. Current: ${status.toUpperCase()}` : `Frozen. Current: ${status.toUpperCase()}`}
           style={{
             width: '24px', height: '24px', borderRadius: '50%',
             background: info.bg, color: info.color, display: 'flex',
             alignItems: 'center', justifyContent: 'center', margin: '0 auto',
-            fontSize: '11px', fontWeight: '800', cursor: 'pointer',
+            fontSize: '11px', fontWeight: '800', 
+            cursor: editable ? 'pointer' : 'not-allowed',
+            opacity: editable ? 1 : 0.55,
             transition: 'transform 0.1s', userSelect: 'none'
           }}
-          onMouseOver={e => e.target.style.transform = 'scale(1.15)'}
-          onMouseOut={e => e.target.style.transform = 'scale(1)'}
+          onMouseOver={e => editable && (e.target.style.transform = 'scale(1.15)')}
+          onMouseOut={e => editable && (e.target.style.transform = 'scale(1)')}
         >
           {info.text}
         </div>
@@ -486,18 +507,20 @@ export default function AttendancePage() {
       const hours = gridWorkData[emp._id]?.[dayNum] || 0;
       return (
         <div 
-          onClick={() => editGridHours(emp._id, dayNum)}
-          title="Click to log hours"
+          onClick={() => editable && editGridHours(emp._id, dayNum)}
+          title={editable ? "Click to log hours" : "Frozen"}
           style={{
             minWidth: '24px', height: '24px', borderRadius: '4px',
             background: hours > 0 ? 'rgba(139, 92, 246, 0.15)' : '#f9fafb',
             color: hours > 0 ? '#8b5cf6' : '#9ca3af', display: 'flex',
             alignItems: 'center', justifyContent: 'center', margin: '0 auto',
             fontSize: '11px', fontWeight: '800', border: hours > 0 ? '1px solid rgba(139, 92, 246, 0.3)' : '1px dashed #cbd5e1',
-            cursor: 'pointer', transition: 'all 0.15s', userSelect: 'none'
+            cursor: editable ? 'pointer' : 'not-allowed',
+            opacity: editable ? 1 : 0.55,
+            transition: 'all 0.15s', userSelect: 'none'
           }}
-          onMouseOver={e => e.target.style.background = hours > 0 ? 'rgba(139, 92, 246, 0.25)' : '#f1f5f9'}
-          onMouseOut={e => e.target.style.background = hours > 0 ? 'rgba(139, 92, 246, 0.15)' : '#f9fafb'}
+          onMouseOver={e => editable && (e.target.style.background = hours > 0 ? 'rgba(139, 92, 246, 0.25)' : '#f1f5f9')}
+          onMouseOut={e => editable && (e.target.style.background = hours > 0 ? 'rgba(139, 92, 246, 0.15)' : '#f9fafb')}
         >
           {hours > 0 ? `${hours}h` : '-'}
         </div>
@@ -522,10 +545,12 @@ export default function AttendancePage() {
         {activeTab !== 'grid' && (
           <button 
             onClick={activeTab === 'daily' ? saveDaily : activeTab === 'worklogs' ? saveWorkLogs : saveMonthly} 
-            disabled={saving || loading} 
+            disabled={saving || loading || (activeTab === 'daily' && !isDateEditable(dailyDate)) || (activeTab === 'worklogs' && !isDateEditable(workLogDate))} 
             style={{
-              background: saved ? '#10b981' : 'var(--primary)', color: '#fff', border: 'none',
-              padding: '10px 24px', borderRadius: '8px', fontWeight: '700', fontSize: '13px', cursor: 'pointer',
+              background: saved ? '#10b981' : ((activeTab === 'daily' && !isDateEditable(dailyDate)) || (activeTab === 'worklogs' && !isDateEditable(workLogDate))) ? '#cbd5e1' : 'var(--primary)', 
+              color: '#fff', border: 'none',
+              padding: '10px 24px', borderRadius: '8px', fontWeight: '700', fontSize: '13px', 
+              cursor: ((activeTab === 'daily' && !isDateEditable(dailyDate)) || (activeTab === 'worklogs' && !isDateEditable(workLogDate))) ? 'not-allowed' : 'pointer',
               transition: 'background 0.3s', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
             }}
           >
@@ -576,6 +601,12 @@ export default function AttendancePage() {
             />
           </div>
 
+          {!isDateEditable(dailyDate) && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>⚠️ Daily attendance for this date is frozen (exceeded 48-hour marking window or is in the future).</span>
+            </div>
+          )}
+
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid var(--card-border)', boxShadow: 'var(--shadow-sm)', overflow: 'auto' }}>
             {loading || loadingDaily ? (
               <div style={{ padding: '50px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
@@ -615,12 +646,16 @@ export default function AttendancePage() {
                               { key: 'absent', label: 'Absent', activeBg: '#fef2f2', activeColor: '#b91c1c', activeBorder: '#ef4444' }
                             ].map(btn => {
                               const isSelected = rec.status === btn.key;
+                              const editable = isDateEditable(dailyDate);
                               return (
                                 <button
                                   key={btn.key}
-                                  onClick={() => updateDailyStatus(emp._id, btn.key)}
+                                  onClick={() => editable && updateDailyStatus(emp._id, btn.key)}
+                                  disabled={!editable}
                                   style={{
-                                    padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+                                    padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', 
+                                    cursor: editable ? 'pointer' : 'not-allowed',
+                                    opacity: editable ? 1 : 0.6,
                                     border: isSelected ? `1.5px solid ${btn.activeBorder}` : '1.5px solid #e5e7eb',
                                     background: isSelected ? btn.activeBg : '#f9fafb',
                                     color: isSelected ? btn.activeColor : '#4b5563', transition: 'all 0.15s'
@@ -636,16 +671,29 @@ export default function AttendancePage() {
                           <input 
                             type="number" min="0" max="24" step="0.5"
                             value={rec.overtime_hours}
+                            disabled={!isDateEditable(dailyDate)}
                             onChange={e => updateDailyField(emp._id, 'overtime_hours', e.target.value)}
-                            style={{ width: '58px', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', textAlign: 'center', fontSize: '13px', fontWeight: '700', outline: 'none', background: '#fafafa', color: 'var(--text-main)' }}
+                            style={{ 
+                              width: '58px', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', 
+                              textAlign: 'center', fontSize: '13px', fontWeight: '700', outline: 'none', 
+                              background: '#fafafa', color: 'var(--text-main)',
+                              cursor: isDateEditable(dailyDate) ? 'text' : 'not-allowed',
+                              opacity: isDateEditable(dailyDate) ? 1 : 0.7
+                            }}
                           />
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <input 
                             type="text" placeholder="E.g. Site audit, late due to train, etc."
                             value={rec.notes}
+                            disabled={!isDateEditable(dailyDate)}
                             onChange={e => updateDailyField(emp._id, 'notes', e.target.value)}
-                            style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: '#fafafa', color: 'var(--text-main)' }}
+                            style={{ 
+                              width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', 
+                              fontSize: '12px', outline: 'none', background: '#fafafa', color: 'var(--text-main)',
+                              cursor: isDateEditable(dailyDate) ? 'text' : 'not-allowed',
+                              opacity: isDateEditable(dailyDate) ? 1 : 0.7
+                            }}
                           />
                         </td>
                       </tr>
@@ -676,6 +724,12 @@ export default function AttendancePage() {
               style={{ marginLeft: 'auto', padding: '7px 12px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#fff', color: 'var(--text-main)', outline: 'none', width: '220px' }} 
             />
           </div>
+
+          {!isDateEditable(workLogDate) && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>⚠️ Work logs for this date are frozen (exceeded 48-hour marking window or is in the future).</span>
+            </div>
+          )}
 
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid var(--card-border)', boxShadow: 'var(--shadow-sm)', overflow: 'auto' }}>
             {loading || loadingWorkLogs ? (
@@ -714,16 +768,29 @@ export default function AttendancePage() {
                           <input 
                             type="number" min="0" max="24" step="0.5"
                             value={rec.hours_worked}
+                            disabled={!isDateEditable(workLogDate)}
                             onChange={e => updateWorkLogField(emp._id, 'hours_worked', e.target.value)}
-                            style={{ width: '70px', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', textAlign: 'center', fontSize: '13px', fontWeight: '700', outline: 'none', background: '#fafafa', color: 'var(--text-main)' }}
+                            style={{ 
+                              width: '70px', padding: '6px 4px', border: '1px solid var(--card-border)', borderRadius: '6px', 
+                              textAlign: 'center', fontSize: '13px', fontWeight: '700', outline: 'none', 
+                              background: '#fafafa', color: 'var(--text-main)',
+                              cursor: isDateEditable(workLogDate) ? 'text' : 'not-allowed',
+                              opacity: isDateEditable(workLogDate) ? 1 : 0.7
+                            }}
                           />
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <input 
                             type="text" placeholder="E.g. Completed bedroom furniture 3D renders, site wiring layout, etc."
                             value={rec.description}
+                            disabled={!isDateEditable(workLogDate)}
                             onChange={e => updateWorkLogField(emp._id, 'description', e.target.value)}
-                            style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', fontSize: '12px', outline: 'none', background: '#fafafa', color: 'var(--text-main)' }}
+                            style={{ 
+                              width: '100%', padding: '6px 10px', border: '1px solid var(--card-border)', borderRadius: '6px', 
+                              fontSize: '12px', outline: 'none', background: '#fafafa', color: 'var(--text-main)',
+                              cursor: isDateEditable(workLogDate) ? 'text' : 'not-allowed',
+                              opacity: isDateEditable(workLogDate) ? 1 : 0.7
+                            }}
                           />
                         </td>
                       </tr>
@@ -885,6 +952,9 @@ export default function AttendancePage() {
             <div style={{ borderLeft: '1.5px solid #cbd5e1', height: '16px', margin: '0 8px' }} />
             <strong>Hourly Grid:</strong>
             <span>Shows hours performed (e.g. 8h). Double click a cell to directly log/edit work hours.</span>
+            <div style={{ borderLeft: '1.5px solid #cbd5e1', height: '16px', margin: '0 8px' }} />
+            <strong style={{ color: '#ef4444' }}>🔒 48h Limit:</strong>
+            <span style={{ color: '#b91c1c', fontWeight: '600' }}>Days older than 48 hours or in the future are frozen (read-only). Quick Fill only fills editable days.</span>
           </div>
         </>
       )}

@@ -55,11 +55,20 @@ export async function POST(request) {
     const m = parseInt(month);
     const daysInMonth = new Date(y, m, 0).getDate();
     
-    // Save daily attendance records for all days of the month
+    // Save daily attendance records for all days of the month (only if editable within 48-hour window)
     for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
       const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
       const parsedDate = new Date(dateStr + 'T00:00:00.000Z');
       
+      const now = new Date();
+      const diffMs = now.getTime() - parsedDate.getTime();
+      const limitMs = 48 * 60 * 60 * 1000;
+      
+      // Skip if older than 48 hours or if in the future
+      if (diffMs > limitMs) continue;
+      const todayMidnight = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+      if (parsedDate.getTime() > todayMidnight.getTime()) continue;
+
       await DailyAttendance.findOneAndUpdate(
         { employee: employeeId, date: parsedDate },
         { 
@@ -131,6 +140,19 @@ export async function POST(request) {
   }
 
   const parsedDate = new Date(date + 'T00:00:00.000Z');
+  const now = new Date();
+  const diffMs = now.getTime() - parsedDate.getTime();
+  const limitMs = 48 * 60 * 60 * 1000;
+
+  if (diffMs > limitMs) {
+    return Response.json({ error: 'Attendance window closed. Cannot mark or edit attendance older than 48 hours.' }, { status: 400 });
+  }
+  if (diffMs < 0) {
+    const todayMidnight = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+    if (parsedDate.getTime() > todayMidnight.getTime()) {
+      return Response.json({ error: 'Cannot mark attendance for future dates.' }, { status: 400 });
+    }
+  }
   year = parsedDate.getUTCFullYear();
   month = parsedDate.getUTCMonth() + 1;
 

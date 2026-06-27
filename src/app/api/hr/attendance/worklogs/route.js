@@ -51,6 +51,19 @@ export async function POST(request) {
   }
 
   const parsedDate = new Date(date + 'T00:00:00.000Z');
+  const now = new Date();
+  const diffMs = now.getTime() - parsedDate.getTime();
+  const limitMs = 48 * 60 * 60 * 1000;
+
+  if (diffMs > limitMs) {
+    return Response.json({ error: 'Attendance window closed. Cannot mark or edit work logs older than 48 hours.' }, { status: 400 });
+  }
+  if (diffMs < 0) {
+    const todayMidnight = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+    if (parsedDate.getTime() > todayMidnight.getTime()) {
+      return Response.json({ error: 'Cannot mark work logs for future dates.' }, { status: 400 });
+    }
+  }
   const year = parsedDate.getUTCFullYear();
   const month = parsedDate.getUTCMonth() + 1;
 
