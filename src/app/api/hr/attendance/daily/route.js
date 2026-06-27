@@ -98,7 +98,7 @@ export async function POST(request) {
     let overtime_hours = 0;
 
     dailyRecords.forEach(rec => {
-      if (rec.status === 'present') {
+      if (rec.status === 'present' || rec.status === 'holiday') {
         present_days += 1;
       } else if (rec.status === 'late') {
         present_days += 1;
@@ -191,7 +191,7 @@ export async function POST(request) {
     let overtime_hours = 0;
 
     dailyRecords.forEach(rec => {
-      if (rec.status === 'present') {
+      if (rec.status === 'present' || rec.status === 'holiday') {
         present_days += 1;
       } else if (rec.status === 'late') {
         present_days += 1;

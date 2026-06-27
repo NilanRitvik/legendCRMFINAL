@@ -105,8 +105,9 @@ export default function AttendancePage() {
         const dailyMap = {};
         employees.filter(e => e.type === 'employee').forEach(emp => {
           const existing = Array.isArray(dailyRecords) ? dailyRecords.find(r => r.employee === emp._id) : null;
+          const isSunday = new Date(dailyDate + 'T00:00:00.000Z').getUTCDay() === 0;
           dailyMap[emp._id] = {
-            status: existing?.status ?? 'present',
+            status: existing?.status ?? (isSunday ? 'holiday' : 'present'),
             overtime_hours: existing?.overtime_hours ?? 0,
             notes: existing?.notes ?? ''
           };
@@ -277,13 +278,16 @@ export default function AttendancePage() {
 
   // Click-to-Cycle status in Grid Sheet
   const cycleGridStatus = async (empId, dayNum) => {
-    const currentStatus = gridDailyData[empId]?.[dayNum] || 'unmarked';
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const isSunday = new Date(dateStr + 'T00:00:00.000Z').getUTCDay() === 0;
+    const currentStatus = gridDailyData[empId]?.[dayNum] || (isSunday ? 'holiday' : 'unmarked');
     const cycle = {
       unmarked: 'present',
       present: 'late',
       late: 'half_day',
       half_day: 'absent',
-      absent: 'unmarked'
+      absent: 'holiday',
+      holiday: 'unmarked'
     };
     const nextStatus = cycle[currentStatus];
 
@@ -474,12 +478,14 @@ export default function AttendancePage() {
     const editable = isDateEditable(dateStr);
 
     if (emp.type === 'employee') {
-      const status = gridDailyData[emp._id]?.[dayNum] || 'unmarked';
+      const isSunday = new Date(dateStr + 'T00:00:00.000Z').getUTCDay() === 0;
+      const status = gridDailyData[emp._id]?.[dayNum] || (isSunday ? 'holiday' : 'unmarked');
       const styles = {
         present: { text: 'P', bg: '#10b981', color: '#fff' },
         late: { text: 'L', bg: '#f59e0b', color: '#fff' },
         half_day: { text: 'H', bg: '#3b82f6', color: '#fff' },
         absent: { text: 'A', bg: '#ef4444', color: '#fff' },
+        holiday: { text: 'HD', bg: '#8b5cf6', color: '#fff' },
         unmarked: { text: '-', bg: '#f3f4f6', color: '#9ca3af' }
       };
       const info = styles[status] || styles.unmarked;
@@ -643,7 +649,8 @@ export default function AttendancePage() {
                               { key: 'present', label: 'Present', activeBg: '#ecfdf5', activeColor: '#065f46', activeBorder: '#10b981' },
                               { key: 'late', label: 'Late', activeBg: '#fffbeb', activeColor: '#b45309', activeBorder: '#f59e0b' },
                               { key: 'half_day', label: 'Half-Day', activeBg: '#eff6ff', activeColor: '#1d4ed8', activeBorder: '#3b82f6' },
-                              { key: 'absent', label: 'Absent', activeBg: '#fef2f2', activeColor: '#b91c1c', activeBorder: '#ef4444' }
+                              { key: 'absent', label: 'Absent', activeBg: '#fef2f2', activeColor: '#b91c1c', activeBorder: '#ef4444' },
+                              { key: 'holiday', label: 'Holiday (HD)', activeBg: '#f5f3ff', activeColor: '#5b21b6', activeBorder: '#8b5cf6' }
                             ].map(btn => {
                               const isSelected = rec.status === btn.key;
                               const editable = isDateEditable(dailyDate);

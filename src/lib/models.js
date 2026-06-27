@@ -527,7 +527,7 @@ export const Logistics = createModelProxy('Logistics', mongoose.models.Logistics
 const DailyAttendanceSchema = new mongoose.Schema({
   employee: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
   date: { type: Date, required: true },
-  status: { type: String, enum: ['present', 'absent', 'half_day', 'late'], default: 'present' },
+  status: { type: String, enum: ['present', 'absent', 'half_day', 'late', 'holiday'], default: 'present' },
   overtime_hours: { type: Number, default: 0 },
   notes: { type: String, default: '' }
 }, { timestamps: true });

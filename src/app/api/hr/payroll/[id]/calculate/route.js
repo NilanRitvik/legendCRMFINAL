@@ -47,7 +47,7 @@ export async function POST(request, { params }) {
   // Compute deductions
   const workingDays = attendance?.total_working_days || 26;
   const absentDays = attendance?.absent_days || 0;
-  const perDayRate = Math.round(basic / workingDays);
+  const perDayRate = Math.round(basic / 26);
   
   const leaveDeduction = Math.round(perDayRate * totalLeaveDays); // unpaid leave deduction
   const absentDeduction = Math.round(perDayRate * absentDays);
