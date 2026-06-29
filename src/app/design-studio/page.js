@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 
 const PHASES = ['design', 'carpentry', 'assembly', 'installation', 'handover'];
 const THEMES = ['Modern Minimalist', 'Scandinavian', 'Industrial Loft', 'Classic Victorian', 'Japandi Harmony', 'Bohemian Chic', 'Art Deco Luxury'];
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 export default function DesignStudio() {
   const [activeTab, setActiveTab] = useState('boq'); // 'boq' | 'gantt' | 'warranty' | 'ai'
