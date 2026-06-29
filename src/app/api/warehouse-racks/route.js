@@ -10,16 +10,17 @@ export async function GET(request) {
     // Fetch all racks from DB
     let racks = await WarehouseRack.find({}).sort({ rack_code: 1 }).lean();
 
-    // If database is empty, auto-generate L-01 to L-50 and R-01 to R-50
-    if (racks.length === 0) {
+    // If database rack count is not 60, clear and regenerate L-01 to L-30 and R-01 to R-30
+    if (racks.length !== 60) {
+      await WarehouseRack.deleteMany({});
       const initialRacks = [];
-      // Generate Left side (L-01 to L-50)
-      for (let i = 1; i <= 50; i++) {
+      // Generate Left side (L-01 to L-30)
+      for (let i = 1; i <= 30; i++) {
         const num = String(i).padStart(2, '0');
         initialRacks.push({ rack_code: `L-${num}`, material_name: '', capacity: 100 });
       }
-      // Generate Right side (R-01 to R-50)
-      for (let i = 1; i <= 50; i++) {
+      // Generate Right side (R-01 to R-30)
+      for (let i = 1; i <= 30; i++) {
         const num = String(i).padStart(2, '0');
         initialRacks.push({ rack_code: `R-${num}`, material_name: '', capacity: 100 });
       }
