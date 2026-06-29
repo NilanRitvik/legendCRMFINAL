@@ -40,7 +40,8 @@ const PAGE_ROUTES = {
   'legend-vision': '/legend-vision', 'vision': '/legend-vision',
   'top-up-nuera': '/top-up-nuera', 'topup': '/top-up-nuera', 'billing': '/top-up-nuera', 'recharge': '/top-up-nuera',
   'design-studio': '/design-studio', 'boq': '/design-studio', 'gantt': '/design-studio', 'milestone': '/design-studio', 'warranty': '/design-studio',
-  'storeroom': '/storeroom', 'rack': '/storeroom', 'warehouse': '/storeroom'
+  'storeroom': '/storeroom', 'rack': '/storeroom', 'warehouse': '/storeroom',
+  'wasteroom': '/wasteroom', 'waste': '/wasteroom', 'bin': '/wasteroom'
 };
 
 // ─── Markdown-like text renderer ─────────────────────────────────────────────

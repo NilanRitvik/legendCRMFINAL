@@ -96,7 +96,7 @@ export async function POST(request) {
       const splitTransport = totalTransport / items.length;
 
       for (const item of items) {
-        const { material_name, material_brand, rate, quantity, unit, damaged_quantity, notes: itemNotes, gst_percentage } = item;
+        const { material_name, material_brand, rate, quantity, unit, damaged_quantity, notes: itemNotes, gst_percentage, rack_code } = item;
         if (!material_name || !quantity || !rate) {
           return Response.json({ error: `Material name, quantity, and rate are required for item: ${material_name || 'unknown'}` }, { status: 400 });
         }
@@ -122,7 +122,8 @@ export async function POST(request) {
           replacement_status: damagedQty > 0 ? 'pending' : 'none',
           batch_id,
           gst_percentage: Number(gst_percentage) || 0,
-          transport_charges: splitTransport
+          transport_charges: splitTransport,
+          rack_code: rack_code || ''
         });
 
         createdTxns.push(transaction);
@@ -132,7 +133,7 @@ export async function POST(request) {
     }
 
     if (action === 'add_old_stock') {
-      const { material_name, material_brand, rate, quantity, unit, purchase_date, notes, supplier, invoice_number } = body;
+      const { material_name, material_brand, rate, quantity, unit, purchase_date, notes, supplier, invoice_number, rack_code } = body;
       if (!material_name || !quantity) {
         return Response.json({ error: 'Material name and quantity are required' }, { status: 400 });
       }
@@ -148,7 +149,8 @@ export async function POST(request) {
         invoice_number: invoice_number || 'OLD-STOCK',
         date: purchase_date ? new Date(purchase_date) : new Date(),
         notes: notes || 'Added as pre-existing/old stock',
-        approval_status: 'approved'
+        approval_status: 'approved',
+        rack_code: rack_code || ''
       });
 
       // Immediately update MaterialStock (auto-approved for old stock)
@@ -318,6 +320,7 @@ export async function POST(request) {
       for (const item of items) {
         const cleanName = item.material_name.trim();
         const qty = Number(item.quantity);
+        const rCode = item.rack_code || '';
         if (!cleanName || isNaN(qty) || qty <= 0) {
           return Response.json({ error: `Invalid item details: ${JSON.stringify(item)}` }, { status: 400 });
         }
@@ -330,7 +333,8 @@ export async function POST(request) {
           notes: notes || '',
           approval_status: 'pending',
           stock_verified: null,
-          batch_id
+          batch_id,
+          rack_code: rCode
         });
         transactions.push(transaction);
       }
@@ -393,6 +397,7 @@ export async function POST(request) {
       for (const item of items) {
         const cleanName = item.material_name.trim();
         const qty = Number(item.quantity);
+        const binCode = item.waste_bin_code || '';
         if (!cleanName || isNaN(qty) || qty <= 0) {
           return Response.json({ error: `Invalid item details: ${JSON.stringify(item)}` }, { status: 400 });
         }
@@ -414,7 +419,8 @@ export async function POST(request) {
           date: date || new Date(),
           notes: notes || '',
           approval_status: 'pending',
-          batch_id
+          batch_id,
+          waste_bin_code: binCode
         });
         transactions.push(transaction);
       }

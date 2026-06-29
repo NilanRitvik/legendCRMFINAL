@@ -9,6 +9,8 @@ export default function PurchasePage() {
   const [machines, setMachines] = useState([]);
   const [projects, setProjects] = useState([]);
   const [approvedDesigns, setApprovedDesigns] = useState([]);
+  const [racksList, setRacksList] = useState([]);
+  const [wasteBinsList, setWasteBinsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -43,7 +45,7 @@ export default function PurchasePage() {
     notes: '',
     transport_charges: '',
     items: [
-      { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '' }
+      { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '', rack_code: '' }
     ]
   });
 
@@ -53,7 +55,7 @@ export default function PurchasePage() {
 
   const [oldStockForm, setOldStockForm] = useState({
     material_name: '', material_brand: '', unit: 'pcs',
-    quantity: '', rate: '', purchase_date: '', notes: ''
+    quantity: '', rate: '', purchase_date: '', notes: '', rack_code: ''
   });
 
   const [issueForm, setIssueForm] = useState({
@@ -69,7 +71,7 @@ export default function PurchasePage() {
   const [issueProject, setIssueProject] = useState('');
   const [issueNotes, setIssueNotes] = useState('');
 
-  const [returnItems, setReturnItems] = useState([{ material_name: '', quantity: '' }]);
+  const [returnItems, setReturnItems] = useState([{ material_name: '', quantity: '', rack_code: '' }]);
   const [returnProject, setReturnProject] = useState('');
   const [returnNotes, setReturnNotes] = useState('');
   const [returnActiveTab, setReturnActiveTab] = useState('log'); // 'log' | 'approve'
@@ -80,7 +82,7 @@ export default function PurchasePage() {
   const [wasteForm, setWasteForm] = useState({
     material_name: '', quantity: '', project: '', notes: ''
   });
-  const [wasteItems, setWasteItems] = useState([{ material_name: '', quantity: '' }]);
+  const [wasteItems, setWasteItems] = useState([{ material_name: '', quantity: '', waste_bin_code: '' }]);
   const [wasteProject, setWasteProject] = useState('');
   const [wasteNotes, setWasteNotes] = useState('');
 
@@ -102,19 +104,25 @@ export default function PurchasePage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [res, resDesigns] = await Promise.all([
+      const [res, resDesigns, resRacks, resWaste] = await Promise.all([
         fetch('/api/purchase'),
-        fetch('/api/designing')
+        fetch('/api/designing'),
+        fetch('/api/warehouse-racks'),
+        fetch('/api/wasteroom-bins')
       ]);
       if (!res.ok) throw new Error('Failed to load inventory data');
       const data = await res.json();
       const dataDesigns = await resDesigns.json();
+      const dataRacks = await resRacks.json();
+      const dataWaste = await resWaste.json();
       setMaterials(Array.isArray(data.materials) ? data.materials : []);
       setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
       setTools(Array.isArray(data.tools) ? data.tools : []);
       setMachines(Array.isArray(data.machines) ? data.machines : []);
       setProjects(Array.isArray(data.projects) ? data.projects : []);
       setApprovedDesigns(Array.isArray(dataDesigns) ? dataDesigns : []);
+      setRacksList(Array.isArray(dataRacks.racks) ? dataRacks.racks : []);
+      setWasteBinsList(Array.isArray(dataWaste.bins) ? dataWaste.bins : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -203,11 +211,11 @@ export default function PurchasePage() {
           notes: '',
           transport_charges: '',
           items: [
-            { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '' }
+            { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '', rack_code: '' }
           ]
         });
         setReplacementForm({ transaction_id: '', received_quantity: '', notes: '' });
-        setOldStockForm({ material_name: '', material_brand: '', unit: 'pcs', quantity: '', rate: '', purchase_date: '', notes: '' });
+        setOldStockForm({ material_name: '', material_brand: '', unit: 'pcs', quantity: '', rate: '', purchase_date: '', notes: '', rack_code: '' });
         setIssueForm({ material_name: '', quantity: '', project: '', notes: '' });
         setReturnForm({ material_name: '', quantity: '', project: '', notes: '' });
         setWasteForm({ material_name: '', quantity: '', project: '', notes: '' });
@@ -249,7 +257,7 @@ export default function PurchasePage() {
   const addPurchaseItem = () => {
     setPurchaseForm({
       ...purchaseForm,
-      items: [...purchaseForm.items, { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '' }]
+      items: [...purchaseForm.items, { material_name: '', material_brand: '', quantity: '', unit: 'pcs', rate: '', damaged_quantity: '', gst_percentage: '', rack_code: '' }]
     });
   };
 
@@ -313,7 +321,7 @@ export default function PurchasePage() {
       });
       if (res.ok) {
         setActiveForm(null);
-        setWasteItems([{ material_name: '', quantity: '' }]);
+        setWasteItems([{ material_name: '', quantity: '', waste_bin_code: '' }]);
         setWasteProject('');
         setWasteNotes('');
         alert('Batch waste write-off request sent successfully! Pending CEO approval.');
@@ -346,7 +354,7 @@ export default function PurchasePage() {
       });
       if (res.ok) {
         setActiveForm(null);
-        setReturnItems([{ material_name: '', quantity: '' }]);
+        setReturnItems([{ material_name: '', quantity: '', rack_code: '' }]);
         setReturnProject('');
         setReturnNotes('');
         alert('Batch stock return request sent successfully! Pending CEO approval.');
@@ -640,9 +648,9 @@ export default function PurchasePage() {
     const exists = currentItems.some(i => i.material_name === materialName);
     if (exists) {
       const filtered = currentItems.filter(i => i.material_name !== materialName);
-      setReturnItems(filtered.length === 0 ? [{ material_name: '', quantity: '' }] : filtered);
+      setReturnItems(filtered.length === 0 ? [{ material_name: '', quantity: '', rack_code: '' }] : filtered);
     } else {
-      setReturnItems([...currentItems, { material_name: materialName, quantity: '1' }]);
+      setReturnItems([...currentItems, { material_name: materialName, quantity: '1', rack_code: '' }]);
     }
   };
 
@@ -655,7 +663,15 @@ export default function PurchasePage() {
     if (exists) {
       setReturnItems(currentItems.map(i => i.material_name === materialName ? { ...i, quantity: qty } : i));
     } else {
-      setReturnItems([...currentItems, { material_name: materialName, quantity: qty }]);
+      setReturnItems([...currentItems, { material_name: materialName, quantity: qty, rack_code: '' }]);
+    }
+  };
+
+  const handleUpdateReturnRack = (materialName, rackCode) => {
+    let currentItems = [...returnItems];
+    const exists = currentItems.some(i => i.material_name === materialName);
+    if (exists) {
+      setReturnItems(currentItems.map(i => i.material_name === materialName ? { ...i, rack_code: rackCode } : i));
     }
   };
 
@@ -667,9 +683,9 @@ export default function PurchasePage() {
     const exists = currentItems.some(i => i.material_name === materialName);
     if (exists) {
       const filtered = currentItems.filter(i => i.material_name !== materialName);
-      setWasteItems(filtered.length === 0 ? [{ material_name: '', quantity: '' }] : filtered);
+      setWasteItems(filtered.length === 0 ? [{ material_name: '', quantity: '', waste_bin_code: '' }] : filtered);
     } else {
-      setWasteItems([...currentItems, { material_name: materialName, quantity: '1' }]);
+      setWasteItems([...currentItems, { material_name: materialName, quantity: '1', waste_bin_code: '' }]);
     }
   };
 
@@ -682,7 +698,15 @@ export default function PurchasePage() {
     if (exists) {
       setWasteItems(currentItems.map(i => i.material_name === materialName ? { ...i, quantity: qty } : i));
     } else {
-      setWasteItems([...currentItems, { material_name: materialName, quantity: qty }]);
+      setWasteItems([...currentItems, { material_name: materialName, quantity: qty, waste_bin_code: '' }]);
+    }
+  };
+
+  const handleUpdateWasteBin = (materialName, binCode) => {
+    let currentItems = [...wasteItems];
+    const exists = currentItems.some(i => i.material_name === materialName);
+    if (exists) {
+      setWasteItems(currentItems.map(i => i.material_name === materialName ? { ...i, waste_bin_code: binCode } : i));
     }
   };
 
@@ -1505,7 +1529,7 @@ export default function PurchasePage() {
 
         return (
           <div className="modal-backdrop">
-            <form className="modal-content" style={{ maxWidth: '950px', maxHeight: '90vh', overflowY: 'auto' }} 
+            <form className="modal-content" style={{ maxWidth: '1320px', maxHeight: '90vh', overflowY: 'auto' }} 
               onSubmit={(e) => { 
                 e.preventDefault(); 
                 // Basic frontend validation
@@ -1660,6 +1684,21 @@ export default function PurchasePage() {
                           onChange={e => updatePurchaseItem(idx, 'damaged_quantity', e.target.value)} style={{ padding: '6px 8px', fontSize: '12.5px' }} />
                       </div>
 
+                      {/* Rack Code Selector */}
+                      <div style={{ flex: 1.3 }}>
+                        <label style={{ fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Put in Rack</label>
+                        <select className="form-control" value={item.rack_code}
+                          onChange={e => updatePurchaseItem(idx, 'rack_code', e.target.value)} style={{ padding: '6px 8px', fontSize: '12.5px', height: '31px' }}>
+                          <option value="">-- No Rack --</option>
+                          {racksList
+                            .filter(r => !r.material_name || r.material_name.toLowerCase().trim() === (item.material_name || '').toLowerCase().trim())
+                            .map(r => (
+                              <option key={r.rack_code} value={r.rack_code}>{r.rack_code} {r.material_name ? '(Assigned)' : '(Empty)'}</option>
+                            ))
+                          }
+                        </select>
+                      </div>
+
                       {/* Total */}
                       <div style={{ flex: 1.4, minWidth: '80px', textAlign: 'right' }}>
                         <label style={{ fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Total (Rs.)</label>
@@ -1772,7 +1811,7 @@ export default function PurchasePage() {
       {/* 2. Add Old Stock Modal */}
       {activeForm === 'old_stock' && (
         <div className="modal-backdrop">
-          <form className="modal-content" style={{ maxWidth: '540px' }} onSubmit={(e) => { e.preventDefault(); handleAction('add_old_stock', { ...oldStockForm, invoice_number: oldStockForm.invoice_number || 'OLD-STOCK', supplier: oldStockForm.supplier || 'Pre-existing Stock' }); }}>
+          <form className="modal-content" style={{ maxWidth: '850px', padding: '24px' }} onSubmit={(e) => { e.preventDefault(); handleAction('add_old_stock', { ...oldStockForm, invoice_number: oldStockForm.invoice_number || 'OLD-STOCK', supplier: oldStockForm.supplier || 'Pre-existing Stock' }); }}>
             <div className="modal-header">
               <div>
                 <h3 className="modal-title">📦 Add Old / Existing Stock</h3>
@@ -1785,29 +1824,45 @@ export default function PurchasePage() {
               ℹ️ Use this form for stock you already have but haven't recorded yet. Invoice number is not mandatory here.
             </div>
 
-            <div className="form-group">
-              <label>Material Name</label>
-              <input type="text" className="form-control" required list="existing-material-names-2"
-                placeholder="E.g. Marine Plywood 18mm" value={oldStockForm.material_name}
-                onChange={e => setOldStockForm({ ...oldStockForm, material_name: e.target.value })} />
-              <datalist id="existing-material-names-2">{materials.map(m => <option key={m._id} value={m.name} />)}</datalist>
-            </div>
-
-            <div className="form-group">
-              <label>Material Brand</label>
-              <input type="text" className="form-control" placeholder="E.g. CenturyPly"
-                value={oldStockForm.material_brand} onChange={e => setOldStockForm({ ...oldStockForm, material_brand: e.target.value })} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label>Quantity Available ({getDynamicQtyLabel(oldStockForm.unit)})</label>
-                <input type="number" step="any" className="form-control" required placeholder={`How many ${getDynamicQtyLabel(oldStockForm.unit)}?`}
-                  value={oldStockForm.quantity} onChange={e => setOldStockForm({ ...oldStockForm, quantity: e.target.value })} />
+            {/* Row 1: Name, Brand, Date */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.3fr 1.3fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Material Name *</label>
+                <input type="text" className="form-control" required list="existing-material-names-2"
+                  placeholder="E.g. Marine Plywood 18mm" value={oldStockForm.material_name}
+                  onChange={e => setOldStockForm({ ...oldStockForm, material_name: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px' }} />
+                <datalist id="existing-material-names-2">{materials.map(m => <option key={m._id} value={m.name} />)}</datalist>
               </div>
-              <div className="form-group">
-                <label>Unit</label>
-                <select className="form-control" required value={oldStockForm.unit} onChange={e => setOldStockForm({ ...oldStockForm, unit: e.target.value })}>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Material Brand</label>
+                <input type="text" className="form-control" placeholder="E.g. CenturyPly"
+                  value={oldStockForm.material_brand} onChange={e => setOldStockForm({ ...oldStockForm, material_brand: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px' }} />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Purchase Date (Optional)</label>
+                <input type="date" className="form-control"
+                  value={oldStockForm.purchase_date} onChange={e => setOldStockForm({ ...oldStockForm, purchase_date: e.target.value })}
+                  style={{ padding: '7px 12px', fontSize: '13px' }} />
+              </div>
+            </div>
+
+            {/* Row 2: Quantity, Unit, Rate, Rack */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr 1fr 1.3fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Qty ({getDynamicQtyLabel(oldStockForm.unit)}) *</label>
+                <input type="number" step="any" className="form-control" required placeholder={`How many ${getDynamicQtyLabel(oldStockForm.unit)}?`}
+                  value={oldStockForm.quantity} onChange={e => setOldStockForm({ ...oldStockForm, quantity: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px' }} />
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Unit *</label>
+                <select className="form-control" required value={oldStockForm.unit} onChange={e => setOldStockForm({ ...oldStockForm, unit: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px', height: '35px' }}>
                   <option value="pcs">pcs (Pieces)</option>
                   <option value="mtr">mtr (Meters)</option>
                   <option value="kg">kg (Kilograms)</option>
@@ -1820,30 +1875,39 @@ export default function PurchasePage() {
                   <option value="box">box (Boxes)</option>
                 </select>
               </div>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label>Approx. Rate (₹) <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>(Optional)</span></label>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Rate (₹) (Opt)</label>
                 <input type="number" className="form-control" placeholder="1500"
-                  value={oldStockForm.rate} onChange={e => setOldStockForm({ ...oldStockForm, rate: e.target.value })} />
+                  value={oldStockForm.rate} onChange={e => setOldStockForm({ ...oldStockForm, rate: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px' }} />
               </div>
-              <div className="form-group">
-                <label>Purchase Date <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>(Optional)</span></label>
-                <input type="date" className="form-control"
-                  value={oldStockForm.purchase_date} onChange={e => setOldStockForm({ ...oldStockForm, purchase_date: e.target.value })} />
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Put in Rack</label>
+                <select className="form-control" value={oldStockForm.rack_code} onChange={e => setOldStockForm({ ...oldStockForm, rack_code: e.target.value })}
+                  style={{ padding: '8px 12px', fontSize: '13px', height: '35px' }}>
+                  <option value="">-- Choose Rack --</option>
+                  {racksList
+                    .filter(r => !r.material_name || r.material_name.toLowerCase().trim() === (oldStockForm.material_name || '').toLowerCase().trim())
+                    .map(r => (
+                      <option key={r.rack_code} value={r.rack_code}>{r.rack_code} {r.material_name ? '(Assigned)' : '(Empty)'}</option>
+                    ))
+                  }
+                </select>
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Notes / Remarks</label>
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Notes / Remarks</label>
               <textarea className="form-control" rows="2" placeholder="E.g. Stock from previous project, found in warehouse..."
-                value={oldStockForm.notes} onChange={e => setOldStockForm({ ...oldStockForm, notes: e.target.value })} />
+                value={oldStockForm.notes} onChange={e => setOldStockForm({ ...oldStockForm, notes: e.target.value })}
+                style={{ padding: '8px 12px', fontSize: '13px' }} />
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setActiveForm(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" style={{ background: '#2563eb' }}>💾 Add Old Stock</button>
+              <button type="submit" className="btn btn-primary" style={{ background: '#2563eb', fontWeight: '800' }}>💾 Add Old Stock</button>
             </div>
           </form>
         </div>
@@ -2094,7 +2158,7 @@ export default function PurchasePage() {
       {/* 4. Multi-Item Return Stock Modal */}
       {activeForm === 'return' && (
         <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-          <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', padding: '24px' }}>
+          <div className="modal-content" style={{ maxWidth: '1250px', width: '95%', padding: '24px' }}>
             {/* Modal Header */}
             <div className="modal-header" style={{ paddingBottom: '10px', borderBottom: 'none' }}>
               <h3 className="modal-title">↩️ Project Return & Verification Portal</h3>
@@ -2247,6 +2311,23 @@ export default function PurchasePage() {
                                   onChange={e => handleUpdateReturnQuantity(m.name, e.target.value)}
                                   style={{ width: '90px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
                                 />
+
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '10px' }}>Rack:</span>
+                                <select
+                                  className="form-control"
+                                  required
+                                  value={selectedItem.rack_code || ''}
+                                  onChange={e => handleUpdateReturnRack(m.name, e.target.value)}
+                                  style={{ width: '100px', padding: '4px 6px', fontSize: '12px', height: '28px', borderRadius: '4px' }}
+                                >
+                                  <option value="">-- Choose --</option>
+                                  {racksList
+                                    .filter(r => !r.material_name || r.material_name.toLowerCase().trim() === m.name.toLowerCase().trim())
+                                    .map(r => (
+                                      <option key={r.rack_code} value={r.rack_code}>{r.rack_code}</option>
+                                    ))
+                                  }
+                                </select>
                               </div>
                             )}
                           </div>
@@ -2582,7 +2663,7 @@ export default function PurchasePage() {
       {/* 5. Multi-Item Waste Write-off Modal */}
       {activeForm === 'waste' && (
         <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-          <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', padding: '24px' }}>
+          <div className="modal-content" style={{ maxWidth: '1250px', width: '95%', padding: '24px' }}>
             <div className="modal-header">
               <h3 className="modal-title" style={{ color: 'var(--danger)' }}>🗑️ Write-off Waste Material (Multi-Item)</h3>
               <button 
@@ -2678,6 +2759,20 @@ export default function PurchasePage() {
                                 onChange={e => handleUpdateWasteQuantity(m.name, e.target.value)}
                                 style={{ width: '90px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
                               />
+
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '10px' }}>Bin:</span>
+                              <select
+                                className="form-control"
+                                required
+                                value={selectedItem.waste_bin_code || ''}
+                                onChange={e => handleUpdateWasteBin(m.name, e.target.value)}
+                                style={{ width: '110px', padding: '4px 6px', fontSize: '12px', height: '28px', borderRadius: '4px' }}
+                              >
+                                <option value="">-- Choose Bin --</option>
+                                {wasteBinsList.map(b => (
+                                  <option key={b.bin_code} value={b.bin_code}>{b.bin_code} ({b.category_name || 'General'})</option>
+                                ))}
+                              </select>
                             </div>
                           )}
                         </div>

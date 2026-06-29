@@ -1,12 +1,16 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+const PHASES = ['design', 'carpentry', 'assembly', 'installation', 'handover'];
+
 export default function Storeroom3D() {
   const [racks, setRacks] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showListModal, setShowListModal] = useState(false);
+  const [focusedRackCode, setFocusedRackCode] = useState(null);
+  const [hoveredRack, setHoveredRack] = useState(null);
   
   // Selected Rack for Edit Assignment Modal
   const [selectedRack, setSelectedRack] = useState(null);
@@ -31,6 +35,22 @@ export default function Storeroom3D() {
     }
     setLoading(false);
   };
+
+  // Find matches based on search query
+  const trimmedSearch = searchQuery.trim().toLowerCase();
+  const matchedRacks = trimmedSearch 
+    ? racks.filter(r => r.material_name && r.material_name.toLowerCase().includes(trimmedSearch))
+    : [];
+  const hasMatches = matchedRacks.length > 0;
+
+  // Auto-focus first match when search query changes
+  useEffect(() => {
+    if (hasMatches) {
+      setFocusedRackCode(matchedRacks[0].rack_code);
+    } else {
+      setFocusedRackCode(null);
+    }
+  }, [searchQuery]);
 
   const handleOpenAssignModal = (rack) => {
     setSelectedRack(rack);
@@ -66,11 +86,6 @@ export default function Storeroom3D() {
     }
   };
 
-  // 30 racks per side split into 6 Bays (columns) and 5 Tiers (rows)
-  // Bay 1: L-01 to L-05
-  // Bay 2: L-06 to L-10
-  // ...
-  // Bay 6: L-26 to L-30
   const getBayRacks = (side, bayIndex) => {
     const start = bayIndex * 5;
     const sideRacks = racks.filter(r => r.rack_code.startsWith(side));
@@ -92,14 +107,14 @@ export default function Storeroom3D() {
     return (
       <div style={{
         position: 'absolute',
-        bottom: '4px',
+        bottom: '6px',
         left: '6px',
         right: '6px',
-        height: '24px',
+        height: '38px',
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        gap: '2px',
+        gap: '3px',
         zIndex: 2
       }}>
         {[...Array(boxCount)].map((_, i) => (
@@ -107,22 +122,18 @@ export default function Storeroom3D() {
             key={i}
             style={{
               flex: 1,
-              height: `${12 + (i * 3)}px`,
-              background: `linear-gradient(135deg, ${isSearched ? '#d4af37' : pileColor} 0%, #1e293b 100%)`,
+              height: `${18 + (i * 7)}px`,
+              background: `linear-gradient(135deg, ${isSearched ? '#ffd700' : pileColor} 0%, #1e293b 100%)`,
               border: `1px solid ${isSearched ? '#ffd700' : 'rgba(255,255,255,0.2)'}`,
-              borderRadius: '2px',
+              borderRadius: '3.5px',
               position: 'relative',
-              boxShadow: '0 2px 3px rgba(0,0,0,0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              boxShadow: '0 2px 4px rgba(0,0,0,0.6)'
             }}
           >
-            {/* Box flap lines */}
-            <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: '1px', background: 'rgba(0,0,0,0.15)' }} />
+            <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: '1px', background: 'rgba(0,0,0,0.2)' }} />
           </div>
         ))}
-        {/* Qty Label floating directly inside */}
+        {/* Qty Label */}
         <span style={{
           position: 'absolute',
           top: '-14px',
@@ -144,15 +155,51 @@ export default function Storeroom3D() {
   const occupiedRacks = racks.filter(r => r.material_name).length;
   const occupancyPercentage = totalRacks > 0 ? Math.round((occupiedRacks / totalRacks) * 100) : 0;
 
+  // Selected focused rack details
+  const focusedRack = focusedRackCode ? racks.find(r => r.rack_code === focusedRackCode) : null;
+  const focusedDensity = focusedRack && focusedRack.material_name ? Math.round((focusedRack.current_stock / focusedRack.capacity) * 100) : 0;
+
   return (
     <div style={{ padding: '24px', minHeight: '100vh', background: '#090d16', color: '#cbd5e1' }}>
       
-      {/* ── CSS KEYFRAMES FOR GOLDEN SEARCH GLOW ── */}
+      {/* ── CSS KEYFRAMES FOR TRANSITIONS & ANIMATIONS ── */}
       <style>{`
         @keyframes goldenPulse {
-          0% { box-shadow: 0 0 8px #d4af37, inset 0 0 4px #d4af37; border-color: #ffd700; transform: scale(1.02); }
-          50% { box-shadow: 0 0 25px #ffd700, inset 0 0 12px #ffd700; border-color: #ffffff; transform: scale(1.05); }
-          100% { box-shadow: 0 0 8px #d4af37, inset 0 0 4px #d4af37; border-color: #ffd700; transform: scale(1.02); }
+          0% { box-shadow: 0 0 10px #d4af37, inset 0 0 5px #d4af37; border-color: #ffd700; transform: scale(1.03) translateZ(10px); }
+          50% { box-shadow: 0 0 30px #ffd700, inset 0 0 15px #ffd700; border-color: #ffffff; transform: scale(1.1) translateZ(25px); }
+          100% { box-shadow: 0 0 10px #d4af37, inset 0 0 5px #d4af37; border-color: #ffd700; transform: scale(1.03) translateZ(10px); }
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(60px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        .rack-item {
+          position: relative;
+        }
+        .rack-tooltip {
+          visibility: hidden;
+          position: absolute;
+          bottom: 120%;
+          left: 50%;
+          transform: translateX(-50%) translateY(5px);
+          background: #0f172a;
+          border: 1.5px solid #334155;
+          color: #fff;
+          padding: 6px 12px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+          z-index: 100;
+          opacity: 0;
+          transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+          pointer-events: none;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+        }
+        .rack-item:hover .rack-tooltip {
+          visibility: visible;
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
         }
       `}</style>
 
@@ -220,208 +267,330 @@ export default function Storeroom3D() {
           Loading virtual warehouse grids...
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: focusedRack ? '1fr 340px' : '1fr', gap: '24px', transition: 'all 0.4s ease-in-out' }}>
           
-          {/* Legend indicator */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '12px', background: '#111827', padding: '10px', borderRadius: '8px', border: '1px solid #1f2937' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#1e293b', border: '1px dashed #475569', borderRadius: '2px' }} /> Empty Rack</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '2px' }} /> Low (&lt;25%)</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#eab308', borderRadius: '2px' }} /> Medium (25% - 60%)</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#22c55e', borderRadius: '2px' }} /> Normal (60% - 95%)</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }} /> High (&gt;95%)</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#ffd700', borderRadius: '2px', animation: 'goldenPulse 2s infinite' }} /> Search Match</span>
-          </div>
-
-          {/* ── 3D WAREHOUSE STAGE ── */}
-          <div style={{
-            position: 'relative',
-            background: 'linear-gradient(135deg, #0b0f19 0%, #151d30 100%)',
-            border: '2px solid #1e293b',
-            borderRadius: '24px',
-            padding: '30px 16px',
-            overflow: 'hidden',
-            boxShadow: 'inset 0 0 40px rgba(0,0,0,0.8)'
-          }}>
+          {/* ── LEFT COLUMN: 3D WAREHOUSE GRID ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
+            {/* Legend indicator */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '12px', background: '#111827', padding: '10px', borderRadius: '8px', border: '1px solid #1f2937' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#1e293b', border: '1px dashed #475569', borderRadius: '2px' }} /> Empty Rack</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '2px' }} /> Low (&lt;25%)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#eab308', borderRadius: '2px' }} /> Medium (25% - 60%)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#22c55e', borderRadius: '2px' }} /> Normal (60% - 95%)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }} /> High (&gt;95%)</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '12px', background: '#ffd700', borderRadius: '2px', animation: 'goldenPulse 2s infinite' }} /> Search Match</span>
+            </div>
+
+            {/* Central Monitor Display for Hovered Rack Details */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1.2fr 0.5fr 1.2fr',
-              gap: '8px',
+              height: '46px',
+              display: 'flex',
               alignItems: 'center',
-              perspective: '1200px'
+              justifyContent: 'center',
+              background: 'rgba(17,24,39,0.9)',
+              border: '1.5px solid #1e293b',
+              borderRadius: '12px',
+              fontSize: '13.5px',
+              color: '#fff',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+              transition: 'all 0.15s ease-in-out',
+              padding: '0 20px',
+              textAlign: 'center'
             }}>
-              
-              {/* LEFT WALL: RACKS L-01 to L-30 */}
+              {hoveredRack ? (
+                hoveredRack.material_name ? (
+                  <div>
+                    <span style={{ color: '#ffd700', fontWeight: '900', marginRight: '10px', fontSize: '14px', border: '1.2px solid #ffd700', padding: '1px 6px', borderRadius: '4px', background: 'rgba(212,175,55,0.1)' }}>
+                      {hoveredRack.rack_code}
+                    </span>
+                    <strong style={{ color: '#fff', fontSize: '14.5px' }}>{hoveredRack.material_name}</strong>
+                    <span style={{ color: '#94a3b8', marginLeft: '12px', fontWeight: '800' }}>
+                      (Stock: {hoveredRack.current_stock.toLocaleString()} {hoveredRack.unit} / Max Capacity: {hoveredRack.capacity.toLocaleString()})
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <span style={{ color: '#64748b', fontWeight: '900', marginRight: '10px', fontSize: '14px', border: '1.2px dashed #475569', padding: '1px 6px', borderRadius: '4px' }}>
+                      {hoveredRack.rack_code}
+                    </span>
+                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>Empty Shelf Rack (Click to assign inventory items)</span>
+                  </div>
+                )
+              ) : (
+                <span style={{ color: '#64748b', fontSize: '13px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>💡</span> Touch or hover over any rack box to view material details here
+                </span>
+              )}
+            </div>
+
+            {/* 3D Stage Canvas */}
+            <div style={{
+              position: 'relative',
+              background: 'linear-gradient(135deg, #0b0f19 0%, #151d30 100%)',
+              border: '2px solid #1e293b',
+              borderRadius: '24px',
+              padding: '30px 16px',
+              overflow: 'hidden',
+              boxShadow: 'inset 0 0 40px rgba(0,0,0,0.8)',
+              transition: 'all 0.3s ease'
+            }}>
               <div style={{
-                transform: 'rotateY(20deg) translateZ(10px)',
-                transformStyle: 'preserve-3d',
-                display: 'flex',
-                gap: '12px',
-                padding: '16px',
-                background: 'rgba(15,23,42,0.6)',
-                border: '2.5px solid #1e293b',
-                borderRadius: '16px',
-                boxShadow: '-10px 10px 20px rgba(0,0,0,0.5)'
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 0.5fr 1.2fr',
+                gap: '8px',
+                alignItems: 'center',
+                perspective: '1200px'
               }}>
-                {[0, 1, 2, 3, 4, 5].map(bayIdx => (
-                  <div key={bayIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
-                    
-                    {/* Orange Industrial Vertical Support Beam Left */}
-                    <div style={{ position: 'absolute', top: '15px', bottom: 0, left: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
-                    {/* Orange Industrial Vertical Support Beam Right */}
-                    <div style={{ position: 'absolute', top: '15px', bottom: 0, right: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
+                
+                {/* LEFT WALL: RACKS L-01 to L-30 */}
+                <div style={{
+                  transform: 'rotateY(20deg) translateZ(10px)',
+                  transformStyle: 'preserve-3d',
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '16px',
+                  background: 'rgba(15,23,42,0.6)',
+                  border: '2.5px solid #1e293b',
+                  borderRadius: '16px',
+                  boxShadow: '-10px 10px 20px rgba(0,0,0,0.5)',
+                  transition: 'opacity 0.4s ease, transform 0.4s ease'
+                }}>
+                  {[0, 1, 2, 3, 4, 5].map(bayIdx => (
+                    <div key={bayIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', top: '15px', bottom: 0, left: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
+                      <div style={{ position: 'absolute', top: '15px', bottom: 0, right: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
 
-                    <div style={{ textAlign: 'center', fontSize: '9px', color: '#ea580c', fontWeight: '900', letterSpacing: '0.5px', background: '#0f172a', padding: '3px 0', borderRadius: '4px', border: '1px solid #1e293b', textTransform: 'uppercase' }}>
-                      Bay L{bayIdx + 1}
+                      <div style={{ textAlign: 'center', fontSize: '9px', color: '#ea580c', fontWeight: '900', letterSpacing: '0.5px', background: '#0f172a', padding: '3px 0', borderRadius: '4px', border: '1px solid #1e293b', textTransform: 'uppercase' }}>
+                        Bay L{bayIdx + 1}
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {getBayRacks('L', bayIdx).map((rack) => {
+                          const isMatched = searchQuery.trim() !== '' && rack.material_name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+                          const isFocused = focusedRackCode === rack.rack_code;
+                          
+                          // Styling flags
+                          const fadeOff = hasMatches && !isMatched;
+
+                          return (
+                            <div
+                              key={rack.rack_code}
+                              className="rack-item"
+                              onMouseEnter={() => setHoveredRack(rack)}
+                              onMouseLeave={() => setHoveredRack(null)}
+                              onClick={() => {
+                                if (rack.material_name) {
+                                  setFocusedRackCode(rack.rack_code);
+                                } else {
+                                  handleOpenAssignModal(rack);
+                                }
+                              }}
+                              style={rackItemStyle(rack, isMatched, isFocused, fadeOff)}
+                            >
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: '#475569', borderBottom: '1px solid #64748b' }} />
+                              <span style={{ fontSize: '8.5px', fontWeight: '900', opacity: 0.8, position: 'absolute', top: '3px', left: '5px', color: '#ffd700', zIndex: 3 }}>
+                                {rack.rack_code}
+                              </span>
+
+                              {!rack.material_name && (
+                                <div style={{ fontSize: '8px', padding: '16px 2px 2px 2px', color: '#475569', fontStyle: 'italic', textAlign: 'center', zIndex: 3 }}>
+                                  Empty
+                                </div>
+                              )}
+
+                              {renderVisualStockPile(rack.current_stock, rack.capacity, isMatched)}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {getBayRacks('L', bayIdx).map((rack) => {
-                        const isSearched = searchQuery.trim() !== '' && rack.material_name.toLowerCase().includes(searchQuery.toLowerCase().trim());
-                        return (
-                          <div
-                            key={rack.rack_code}
-                            onClick={() => handleOpenAssignModal(rack)}
-                            style={rackStyle(rack, isSearched)}
-                          >
-                            {/* Steel Horizontal Beam */}
-                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: '#475569', borderBottom: '1px solid #64748b' }} />
+                  ))}
+                </div>
 
-                            <span style={{ fontSize: '8px', fontWeight: '900', opacity: 0.5, position: 'absolute', top: '2px', left: '4px', zIndex: 3 }}>
-                              {rack.rack_code}
-                            </span>
-                            
-                            {rack.material_name ? (
-                              <div style={{ fontSize: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', padding: '12px 2px 2px 2px', textAlign: 'center', color: '#fff', fontWeight: '700', zIndex: 3 }}>
-                                {rack.material_name}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '8px', padding: '12px 2px 2px 2px', color: '#64748b', fontStyle: 'italic', textAlign: 'center', zIndex: 3 }}>
-                                Empty
-                              </div>
-                            )}
+                {/* CENTER: PERSPECTIVE AISLE ROAD */}
+                <div style={{
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '40px 0',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    width: '45px',
+                    height: '350px',
+                    background: 'repeating-linear-gradient(45deg, #eab308, #eab308 10px, #0f172a 10px, #0f172a 20px)',
+                    opacity: 0.25,
+                    borderRadius: '6px',
+                    boxShadow: '0 0 15px rgba(0,0,0,0.5)'
+                  }} />
 
-                            {renderVisualStockPile(rack.current_stock, rack.capacity, isSearched)}
-
-                            {/* Floating details overlay on match */}
-                            {isSearched && (
-                              <div style={{
-                                position: 'absolute', top: '-34px', left: '50%', transform: 'translateX(-50%)',
-                                background: '#ffd700', color: '#000', fontSize: '9px', fontWeight: '900',
-                                padding: '3px 6px', borderRadius: '4px', whiteSpace: 'nowrap', zIndex: 10,
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.5)', border: '1px solid #fff'
-                              }}>
-                                {rack.current_stock} {rack.unit} available
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                  <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '32px', filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.8))' }}>🚜</div>
+                    <div style={{ fontSize: '9px', fontWeight: '900', color: '#eab308', letterSpacing: '1.2px', textTransform: 'uppercase', background: '#090d16', padding: '4px 8px', borderRadius: '4px', border: '1px solid #eab308', marginTop: '10px' }}>
+                      AISLE WAY
                     </div>
                   </div>
-                ))}
+                </div>
+
+                {/* RIGHT WALL: RACKS R-01 to R-30 */}
+                <div style={{
+                  transform: 'rotateY(-20deg) translateZ(10px)',
+                  transformStyle: 'preserve-3d',
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '16px',
+                  background: 'rgba(15,23,42,0.6)',
+                  border: '2.5px solid #1e293b',
+                  borderRadius: '16px',
+                  boxShadow: '10px 10px 20px rgba(0,0,0,0.5)',
+                  transition: 'opacity 0.4s ease, transform 0.4s ease'
+                }}>
+                  {[0, 1, 2, 3, 4, 5].map(bayIdx => (
+                    <div key={bayIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', top: '15px', bottom: 0, left: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
+                      <div style={{ position: 'absolute', top: '15px', bottom: 0, right: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
+
+                      <div style={{ textAlign: 'center', fontSize: '9px', color: '#ea580c', fontWeight: '900', letterSpacing: '0.5px', background: '#0f172a', padding: '3px 0', borderRadius: '4px', border: '1px solid #1e293b', textTransform: 'uppercase' }}>
+                        Bay R{bayIdx + 1}
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {getBayRacks('R', bayIdx).map((rack) => {
+                          const isMatched = searchQuery.trim() !== '' && rack.material_name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+                          const isFocused = focusedRackCode === rack.rack_code;
+                          const fadeOff = hasMatches && !isMatched;
+
+                          return (
+                            <div
+                              key={rack.rack_code}
+                              className="rack-item"
+                              onMouseEnter={() => setHoveredRack(rack)}
+                              onMouseLeave={() => setHoveredRack(null)}
+                              onClick={() => {
+                                if (rack.material_name) {
+                                  setFocusedRackCode(rack.rack_code);
+                                } else {
+                                  handleOpenAssignModal(rack);
+                                }
+                              }}
+                              style={rackItemStyle(rack, isMatched, isFocused, fadeOff)}
+                            >
+                              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: '#475569', borderBottom: '1px solid #64748b' }} />
+                              <span style={{ fontSize: '8.5px', fontWeight: '900', opacity: 0.8, position: 'absolute', top: '3px', left: '5px', color: '#ffd700', zIndex: 3 }}>
+                                {rack.rack_code}
+                              </span>
+
+                              {!rack.material_name && (
+                                <div style={{ fontSize: '8px', padding: '16px 2px 2px 2px', color: '#475569', fontStyle: 'italic', textAlign: 'center', zIndex: 3 }}>
+                                  Empty
+                                </div>
+                              )}
+
+                              {renderVisualStockPile(rack.current_stock, rack.capacity, isMatched)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* ── RIGHT COLUMN: SLIDE-OUT FOCUSED RACK DETAIL PANEL ── */}
+          {focusedRack && (
+            <div style={{
+              background: '#111827',
+              border: '1.5px solid #1e293b',
+              borderRadius: '20px',
+              padding: '24px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              position: 'sticky',
+              top: '24px',
+              height: 'fit-content'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1e293b', paddingBottom: '12px' }}>
+                <span style={{ fontSize: '10px', color: '#ffd700', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                  🎯 Focused Position
+                </span>
+                <button
+                  onClick={() => setFocusedRackCode(null)}
+                  style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                >
+                  ×
+                </button>
               </div>
 
-              {/* CENTER: PERSPECTIVE AISLE ROAD */}
-              <div style={{
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '40px 0',
-                position: 'relative'
-              }}>
-                <div style={{
-                  width: '45px',
-                  height: '350px',
-                  background: 'repeating-linear-gradient(45deg, #eab308, #eab308 10px, #0f172a 10px, #0f172a 20px)',
-                  opacity: 0.25,
-                  borderRadius: '6px',
-                  boxShadow: '0 0 15px rgba(0,0,0,0.5)'
-                }} />
+              {/* Huge Rack Code Header */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <h2 style={{ fontSize: '32px', fontWeight: '900', color: '#ffd700', margin: 0 }}>{focusedRack.rack_code}</h2>
+                <span style={{ fontSize: '12px', color: '#94a3b8' }}>({focusedRack.rack_code.startsWith('L') ? 'Left Aisle' : 'Right Aisle'})</span>
+              </div>
 
-                <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '32px', filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.8))' }}>🚜</div>
-                  <div style={{ fontSize: '9px', fontWeight: '900', color: '#eab308', letterSpacing: '1.2px', textTransform: 'uppercase', background: '#090d16', padding: '4px 8px', borderRadius: '4px', border: '1px solid #eab308', marginTop: '10px' }}>
-                    AISLE WAY
+              {/* Material Detail */}
+              <div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '800', marginBottom: '4px' }}>Assigned Material</div>
+                <strong style={{ fontSize: '16px', color: '#fff', display: 'block', lineHeight: '1.3' }}>{focusedRack.material_name}</strong>
+              </div>
+
+              {/* Occupancy metrics */}
+              <div style={{ background: '#090d16', border: '1px solid #1e293b', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: '#94a3b8' }}>Available Stock:</span>
+                  <strong style={{ color: '#fff' }}>{focusedRack.current_stock.toLocaleString()} {focusedRack.unit}</strong>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: '#94a3b8' }}>Storage Capacity:</span>
+                  <strong style={{ color: '#94a3b8' }}>{focusedRack.capacity.toLocaleString()} {focusedRack.unit}</strong>
+                </div>
+
+                {/* Progress bar visual density */}
+                <div style={{ marginTop: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', fontWeight: '800' }}>
+                    <span style={{ color: '#64748b' }}>Shelf density:</span>
+                    <span style={{ color: focusedDensity > 95 ? '#ef4444' : '#22c55e' }}>{focusedDensity}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${Math.min(100, focusedDensity)}%`,
+                      height: '100%',
+                      background: focusedDensity > 95 ? '#ef4444' : focusedDensity > 60 ? '#22c55e' : '#3b82f6',
+                      borderRadius: '3px',
+                      transition: 'width 0.4s ease'
+                    }} />
                   </div>
                 </div>
               </div>
 
-              {/* RIGHT WALL: RACKS R-01 to R-30 */}
-              <div style={{
-                transform: 'rotateY(-20deg) translateZ(10px)',
-                transformStyle: 'preserve-3d',
-                display: 'flex',
-                gap: '12px',
-                padding: '16px',
-                background: 'rgba(15,23,42,0.6)',
-                border: '2.5px solid #1e293b',
-                borderRadius: '16px',
-                boxShadow: '10px 10px 20px rgba(0,0,0,0.5)'
-              }}>
-                {[0, 1, 2, 3, 4, 5].map(bayIdx => (
-                  <div key={bayIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
-                    
-                    {/* Orange Industrial Vertical Support Beam Left */}
-                    <div style={{ position: 'absolute', top: '15px', bottom: 0, left: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
-                    {/* Orange Industrial Vertical Support Beam Right */}
-                    <div style={{ position: 'absolute', top: '15px', bottom: 0, right: '-4px', width: '3px', background: 'linear-gradient(to bottom, #ea580c, #f97316)', zIndex: 1, borderRadius: '2px' }} />
-
-                    <div style={{ textAlign: 'center', fontSize: '9px', color: '#ea580c', fontWeight: '900', letterSpacing: '0.5px', background: '#0f172a', padding: '3px 0', borderRadius: '4px', border: '1px solid #1e293b', textTransform: 'uppercase' }}>
-                      Bay R{bayIdx + 1}
-                    </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {getBayRacks('R', bayIdx).map((rack) => {
-                        const isSearched = searchQuery.trim() !== '' && rack.material_name.toLowerCase().includes(searchQuery.toLowerCase().trim());
-                        return (
-                          <div
-                            key={rack.rack_code}
-                            onClick={() => handleOpenAssignModal(rack)}
-                            style={rackStyle(rack, isSearched)}
-                          >
-                            {/* Steel Horizontal Beam */}
-                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: '#475569', borderBottom: '1px solid #64748b' }} />
-
-                            <span style={{ fontSize: '8px', fontWeight: '900', opacity: 0.5, position: 'absolute', top: '2px', left: '4px', zIndex: 3 }}>
-                              {rack.rack_code}
-                            </span>
-
-                            {rack.material_name ? (
-                              <div style={{ fontSize: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', padding: '12px 2px 2px 2px', textAlign: 'center', color: '#fff', fontWeight: '700', zIndex: 3 }}>
-                                {rack.material_name}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: '8px', padding: '12px 2px 2px 2px', color: '#64748b', fontStyle: 'italic', textAlign: 'center', zIndex: 3 }}>
-                                Empty
-                              </div>
-                            )}
-
-                            {renderVisualStockPile(rack.current_stock, rack.capacity, isSearched)}
-
-                            {/* Floating details overlay on match */}
-                            {isSearched && (
-                              <div style={{
-                                position: 'absolute', top: '-34px', left: '50%', transform: 'translateX(-50%)',
-                                background: '#ffd700', color: '#000', fontSize: '9px', fontWeight: '900',
-                                padding: '3px 6px', borderRadius: '4px', whiteSpace: 'nowrap', zIndex: 10,
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.5)', border: '1px solid #fff'
-                              }}>
-                                {rack.current_stock} {rack.unit} available
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+              {/* Status advisory info */}
+              <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic', borderTop: '1px solid #1e293b', paddingTop: '10px' }}>
+                * All additions via Purchase bills and subtractions via project issues/returns will dynamically update this shelf.
               </div>
 
+              {/* Action Button */}
+              <button
+                onClick={() => handleOpenAssignModal(focusedRack)}
+                style={{
+                  width: '100%', padding: '12px', background: '#1e293b', border: '1px solid #334155',
+                  color: '#fff', borderRadius: '8px', fontWeight: '800', cursor: 'pointer',
+                  fontSize: '12px', transition: 'all 0.15s', textAlign: 'center', marginTop: '10px'
+                }}
+              >
+                ✏️ Reassign Rack Material
+              </button>
             </div>
-          </div>
+          )}
+
         </div>
       )}
 
@@ -564,13 +733,13 @@ export default function Storeroom3D() {
 }
 
 // Inline dynamic styles for rack block elements
-const rackStyle = (rack, isSearched) => {
+const rackItemStyle = (rack, isMatched, isFocused, fadeOff) => {
   const isOccupied = !!rack.material_name;
   
   const baseStyle = {
     position: 'relative',
-    height: '42px',
-    background: isOccupied ? 'rgba(30, 41, 59, 0.9)' : 'rgba(15, 23, 42, 0.4)',
+    height: '56px',
+    background: isOccupied ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.4)',
     border: isOccupied ? '1.5px solid #475569' : '1px dashed rgba(71, 85, 105, 0.4)',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -581,16 +750,37 @@ const rackStyle = (rack, isSearched) => {
     justifyContent: 'flex-start',
     boxSizing: 'border-box',
     boxShadow: isOccupied ? '0 4px 6px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.05)' : 'none',
-    transition: 'all 0.15s ease-in-out',
+    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
     userSelect: 'none'
   };
 
-  if (isSearched) {
+  if (isFocused) {
     return {
       ...baseStyle,
-      animation: 'goldenPulse 2.5s infinite',
-      border: '2px solid #ffd700',
-      zIndex: 5
+      transform: 'scale(1.15) translateZ(30px)',
+      boxShadow: '0 8px 25px rgba(212,175,55,0.4), inset 0 0 10px rgba(212,175,55,0.2)',
+      borderColor: '#ffd700',
+      zIndex: 10,
+      opacity: 1
+    };
+  }
+
+  if (isMatched) {
+    return {
+      ...baseStyle,
+      animation: 'goldenPulse 2s infinite',
+      zIndex: 8,
+      opacity: 1
+    };
+  }
+
+  if (fadeOff) {
+    return {
+      ...baseStyle,
+      opacity: 0.1,
+      transform: 'scale(0.92)',
+      pointerEvents: 'none',
+      boxShadow: 'none'
     };
   }
 

@@ -1,8 +1,8 @@
 import dbConnect from '@/lib/dbConnect';
-import { WarehouseRack, MaterialStock } from '@/lib/models';
+import { WarehouseRack, MaterialStock, MaterialTransaction } from '@/lib/models';
 import { logActivity } from '@/lib/activityLogger';
 
-// GET: Fetch all 100 racks (auto-initializes them if not found)
+// GET: Fetch all 60 racks (auto-initializes them if not found)
 export async function GET(request) {
   try {
     await dbConnect();
@@ -40,13 +40,38 @@ export async function GET(request) {
       };
     });
 
+    // Fetch all approved material transactions to calculate rack-level stock
+    const transactions = await MaterialTransaction.find({ approval_status: 'approved' }).lean();
+    
+    // Build a map of rack stock values based on transactions
+    const rackStockMap = {};
+    transactions.forEach(t => {
+      if (!t.rack_code) return;
+      const code = t.rack_code.trim().toUpperCase();
+      if (typeof rackStockMap[code] === 'undefined') {
+        rackStockMap[code] = 0;
+      }
+      const qty = Number(t.quantity) || 0;
+      if (t.transaction_type === 'purchase' || t.transaction_type === 'return') {
+        rackStockMap[code] += qty;
+      } else if (t.transaction_type === 'issue' || t.transaction_type === 'waste') {
+        rackStockMap[code] -= qty;
+      }
+    });
+
     // Map current stock to each rack based on assigned material name
     const enrichedRacks = racks.map(r => {
+      const code = r.rack_code.trim().toUpperCase();
       const matName = r.material_name ? r.material_name.toLowerCase().trim() : '';
       const stockInfo = matName ? stockMap[matName] : null;
+      
+      // Use rack-specific ledger value if it has transaction records, else fallback to material's total stock
+      const hasRackTx = typeof rackStockMap[code] !== 'undefined';
+      const current_stock = hasRackTx ? Math.max(0, rackStockMap[code]) : (stockInfo ? stockInfo.current_stock : 0);
+
       return {
         ...r,
-        current_stock: stockInfo ? stockInfo.current_stock : 0,
+        current_stock,
         unit: stockInfo ? stockInfo.unit : 'pcs'
       };
     });
