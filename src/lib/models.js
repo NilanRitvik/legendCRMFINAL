@@ -418,7 +418,8 @@ const MaterialTransactionSchema = new mongoose.Schema({
   gst_percentage: { type: Number, default: 0 },
   transport_charges: { type: Number, default: 0 },
   accounts_approved: { type: Boolean, default: false },
-  accounts_approved_date: { type: Date, default: null }
+  accounts_approved_date: { type: Date, default: null },
+  parent_transaction: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialTransaction' }
 }, { timestamps: true });
 
 // 19. Tool Asset Schema

@@ -236,14 +236,7 @@ export async function POST(request) {
         return Response.json({ error: `Received quantity (${qty}) exceeds remaining pending replacement (${remaining})` }, { status: 400 });
       }
 
-      // Update original transaction
-      origTx.replacement_received_quantity = (origTx.replacement_received_quantity || 0) + qty;
-      if (origTx.replacement_received_quantity >= origTx.damaged_quantity) {
-        origTx.replacement_status = 'replaced';
-      }
-      await origTx.save();
-
-      // Create a replacement record (auto-approved purchase transaction)
+      // Create a replacement record (pending CEO approval)
       const cleanName = origTx.material_name.trim();
       const replacementTx = await MaterialTransaction.create({
         transaction_type: 'purchase',
@@ -255,18 +248,20 @@ export async function POST(request) {
         invoice_number: `${origTx.invoice_number}-REPLACEMENT`,
         date: new Date(),
         notes: notes || `Replacement for damaged goods (Ref: ${origTx.invoice_number})`,
-        approval_status: 'approved'
+        approval_status: 'pending',
+        parent_transaction: origTx._id
       });
 
-      // Immediately add received replacement quantity to MaterialStock
-      await MaterialStock.findOneAndUpdate(
-        { name: { $regex: new RegExp(`^${cleanName}$`, 'i') } },
-        {
-          $inc: { current_stock: qty },
-          $setOnInsert: { name: cleanName, unit: origTx.unit || 'pcs' }
-        },
-        { upsert: true, new: true }
-      );
+      // Log activity
+      await logActivity({
+        username,
+        user_role,
+        action_type: 'create',
+        module: 'purchase',
+        description: `Logged replacement claim for: ${qty} units of ${cleanName} (Ref: ${origTx.invoice_number}) - Awaiting CEO approval`,
+        ref_id: replacementTx._id.toString(),
+        ref_name: cleanName
+      });
 
       return Response.json({ transaction: replacementTx }, { status: 201 });
     }

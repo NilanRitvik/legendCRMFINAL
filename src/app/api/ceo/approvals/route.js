@@ -102,6 +102,18 @@ export async function PUT(request) {
         if (transaction.transaction_type === 'purchase') {
           const damaged = Number(transaction.damaged_quantity) || 0;
           stockRecord.current_stock = (stockRecord.current_stock || 0) + (qty - damaged);
+
+          // If this is an approved replacement transaction, update the original parent transaction
+          if (transaction.parent_transaction) {
+            const origTx = await MaterialTransaction.findById(transaction.parent_transaction);
+            if (origTx) {
+              origTx.replacement_received_quantity = (origTx.replacement_received_quantity || 0) + qty;
+              if (origTx.replacement_received_quantity >= origTx.damaged_quantity) {
+                origTx.replacement_status = 'replaced';
+              }
+              await origTx.save();
+            }
+          }
         } else if (transaction.transaction_type === 'issue' || transaction.transaction_type === 'waste') {
           stockRecord.current_stock = Math.max(0, (stockRecord.current_stock || 0) - qty);
         }
