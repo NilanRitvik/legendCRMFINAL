@@ -9,7 +9,7 @@ const ALL_PAGES = [
   'dashboard','clients','projects','payments','monthly-statements',
   'analytics','assets','team','amc','designing','purchase',
   'hr','hr-employees','hr-leaves','hr-attendance','hr-payroll',
-  'installation', 'manufacturing', 'supervisor', 'supervisor-input', 'legend-vision', 'top-up-nuera', 'design-studio'
+  'installation', 'manufacturing', 'supervisor', 'supervisor-input', 'legend-vision', 'top-up-nuera', 'design-studio', 'storeroom'
 ];
 
 const RAW_MENU = [
@@ -21,6 +21,7 @@ const RAW_MENU = [
   { type: 'item', name: 'Projects & Contracts',   path: '/projects',           icon: '📁', key: 'projects' },
   { type: 'item', name: 'Supervisor Portal',     path: '/supervisor',         icon: '👷', key: 'supervisor' },
   { type: 'item', name: 'Purchase & Stock',       path: '/purchase',           icon: '🛒', key: 'purchase' },
+  { type: 'item', name: 'Virtual Storeroom 3D',   path: '/storeroom',          icon: '📦', key: 'storeroom' },
   { type: 'item', name: 'Manufacturing & QC',     path: '/manufacturing',      icon: '🏭', key: 'manufacturing' },
   { type: 'item', name: 'Site Installation',      path: '/installation',       icon: '🔧', key: 'installation' },
   { type: 'item', name: 'Accounts & Ledgers',     path: '/payments',           icon: '💰', key: 'payments' },

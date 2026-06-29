@@ -699,5 +699,15 @@ const WarrantyRegistrySchema = new mongoose.Schema({
 
 export const WarrantyRegistry = createModelProxy('WarrantyRegistry', mongoose.models.WarrantyRegistry || mongoose.model('WarrantyRegistry', WarrantyRegistrySchema));
 
+// 35. Warehouse Rack Schema
+const WarehouseRackSchema = new mongoose.Schema({
+  rack_code: { type: String, required: true, unique: true }, // e.g. L-01 to L-50, R-01 to R-50
+  material_name: { type: String, default: '' }, // Assigned material name
+  capacity: { type: Number, default: 100 } // Max limit for visual fill calculation
+}, { timestamps: true });
+
+export const WarehouseRack = createModelProxy('WarehouseRack', mongoose.models.WarehouseRack || mongoose.model('WarehouseRack', WarehouseRackSchema));
+
+
 
 
