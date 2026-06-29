@@ -648,4 +648,55 @@ const SettingsSchema = new mongoose.Schema({
 
 export const Settings = createModelProxy('Settings', mongoose.models.Settings || mongoose.model('Settings', SettingsSchema));
 
+// 32. Bill of Quantities (BOQ) Schema
+const BOQSchema = new mongoose.Schema({
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, unique: true },
+  rooms: [{
+    room_name: { type: String, required: true },
+    items: [{
+      name: { type: String, required: true },
+      material: String, // Optional linked material name
+      quantity: { type: Number, required: true, default: 1 },
+      unit: { type: String, default: 'pcs' },
+      rate: { type: Number, required: true, default: 0 },
+      markup: { type: Number, default: 0 }, // Markup percentage
+      total: { type: Number, default: 0 }
+    }]
+  }],
+  grand_total: { type: Number, default: 0 },
+  status: { type: String, enum: ['draft', 'approved', 'active'], default: 'draft' }
+}, { timestamps: true });
+
+export const BOQ = createModelProxy('BOQ', mongoose.models.BOQ || mongoose.model('BOQ', BOQSchema));
+
+// 33. Project Milestones & Gantt Schema
+const ProjectMilestoneSchema = new mongoose.Schema({
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
+  title: { type: String, required: true },
+  phase: { type: String, enum: ['design', 'carpentry', 'assembly', 'installation', 'handover'], required: true },
+  start_date: { type: Date, required: true },
+  end_date: { type: Date, required: true },
+  progress: { type: Number, default: 0, min: 0, max: 100 },
+  status: { type: String, enum: ['pending', 'in_progress', 'completed'], default: 'pending' },
+  notes: String
+}, { timestamps: true });
+
+export const ProjectMilestone = createModelProxy('ProjectMilestone', mongoose.models.ProjectMilestone || mongoose.model('ProjectMilestone', ProjectMilestoneSchema));
+
+// 34. Warranty Registry Schema
+const WarrantyRegistrySchema = new mongoose.Schema({
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
+  item_name: { type: String, required: true },
+  brand: { type: String, required: true }, // e.g. Hettich, Blum, Greenply
+  serial_number: String,
+  warranty_years: { type: Number, required: true, default: 1 },
+  start_date: { type: Date, required: true },
+  end_date: { type: Date, required: true },
+  status: { type: String, enum: ['active', 'expired'], default: 'active' },
+  notes: String
+}, { timestamps: true });
+
+export const WarrantyRegistry = createModelProxy('WarrantyRegistry', mongoose.models.WarrantyRegistry || mongoose.model('WarrantyRegistry', WarrantyRegistrySchema));
+
+
 
