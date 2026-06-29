@@ -451,53 +451,65 @@ export default function DesignStudio() {
                       </div>
 
                       {/* Items Table */}
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid #cbd5e1', color: 'var(--text-muted)', textAlign: 'left' }}>
-                            <th style={{ padding: '8px 4px' }}>Item Description</th>
-                            <th style={{ padding: '8px 4px' }}>Link Material (Inventory)</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'center', width: '80px' }}>Qty</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'center', width: '80px' }}>Unit</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'right', width: '100px' }}>Unit Price (₹)</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'center', width: '80px' }}>Markup (%)</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'right', width: '100px' }}>Total (₹)</th>
-                            <th style={{ padding: '8px 4px', textAlign: 'center', width: '40px' }} />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {room.items.map((item, itemIdx) => (
-                            <tr key={itemIdx} style={{ borderBottom: '1px dotted #e2e8f0' }}>
-                              <td style={{ padding: '6px 4px' }}>
-                                <input type="text" className="form-control" value={item.name} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'name', e.target.value)} style={{ padding: '6px', fontSize: '12px' }} />
-                              </td>
-                              <td style={{ padding: '6px 4px' }}>
-                                <select className="form-control" value={item.material} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'material', e.target.value)} style={{ padding: '6px', fontSize: '12px' }}>
-                                  <option value="">-- Custom Material --</option>
-                                  {materials.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
-                                </select>
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                                <input type="number" className="form-control" value={item.quantity} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'quantity', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px' }} />
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                                <input type="text" className="form-control" value={item.unit} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'unit', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px' }} />
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                                <input type="number" className="form-control" value={item.rate} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'rate', e.target.value)} style={{ padding: '6px', textAlign: 'right', fontSize: '12px' }} />
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                                <input type="number" className="form-control" value={item.markup} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'markup', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px' }} />
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '800', color: 'var(--text-main)' }}>
-                                ₹{(item.total || 0).toLocaleString()}
-                              </td>
-                              <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-                                <button type="button" onClick={() => removeBoqItem(roomIdx, itemIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}>🗑️</button>
-                              </td>
+                      <div style={{ overflowX: 'auto', width: '100%', marginTop: '8px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', minWidth: '850px', tableLayout: 'fixed' }}>
+                          <colgroup>
+                            <col style={{ width: '25%' }} />
+                            <col style={{ width: '22%' }} />
+                            <col style={{ width: '8%' }} />
+                            <col style={{ width: '8%' }} />
+                            <col style={{ width: '12%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '11%' }} />
+                            <col style={{ width: '4%' }} />
+                          </colgroup>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #cbd5e1', color: 'var(--text-muted)', textAlign: 'left' }}>
+                              <th style={{ padding: '8px 4px' }}>Item Description</th>
+                              <th style={{ padding: '8px 4px' }}>Link Material (Inventory)</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Qty</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Unit</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'right' }}>Unit Price (₹)</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Markup (%)</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'right' }}>Total (₹)</th>
+                              <th style={{ padding: '8px 4px', textAlign: 'center' }} />
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {room.items.map((item, itemIdx) => (
+                              <tr key={itemIdx} style={{ borderBottom: '1px dotted #e2e8f0' }}>
+                                <td style={{ padding: '6px 4px' }}>
+                                  <input type="text" className="form-control" value={item.name} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'name', e.target.value)} style={{ padding: '6px', fontSize: '12px', width: '100%', boxSizing: 'border-box' }} />
+                                </td>
+                                <td style={{ padding: '6px 4px' }}>
+                                  <select className="form-control" value={item.material} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'material', e.target.value)} style={{ padding: '6px', fontSize: '12px', width: '100%', boxSizing: 'border-box' }}>
+                                    <option value="">-- Custom Material --</option>
+                                    {materials.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
+                                  </select>
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                                  <input type="number" className="form-control" value={item.quantity} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'quantity', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px', width: '100%', boxSizing: 'border-box' }} />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                                  <input type="text" className="form-control" value={item.unit} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'unit', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px', width: '100%', boxSizing: 'border-box' }} />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                                  <input type="number" className="form-control" value={item.rate} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'rate', e.target.value)} style={{ padding: '6px', textAlign: 'right', fontSize: '12px', width: '100%', boxSizing: 'border-box' }} />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                                  <input type="number" className="form-control" value={item.markup} onChange={e => updateBoqItemField(roomIdx, itemIdx, 'markup', e.target.value)} style={{ padding: '6px', textAlign: 'center', fontSize: '12px', width: '100%', boxSizing: 'border-box' }} />
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'right', fontWeight: '800', color: 'var(--text-main)' }}>
+                                  ₹{(item.total || 0).toLocaleString()}
+                                </td>
+                                <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                                  <button type="button" onClick={() => removeBoqItem(roomIdx, itemIdx)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px' }}>🗑️</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   ))}
                 </div>
