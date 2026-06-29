@@ -23,6 +23,8 @@ export async function POST(request) {
     let fileName = '';
     let fileUrl = '';
     let notes = '';
+    let acceptanceFileName = '';
+    let acceptanceFileUrl = '';
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -35,29 +37,46 @@ export async function POST(request) {
         return Response.json({ error: 'Client and Design Type are required' }, { status: 400 });
       }
 
-      if (!file || typeof file === 'string') {
-        return Response.json({ error: 'No design file uploaded' }, { status: 400 });
-      }
-
-      // Read file buffer
-      const buffer = Buffer.from(await file.arrayBuffer());
-
       // Ensure uploads/designs folder exists
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'designs');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
-      // Safe filename
-      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const uniqueFileName = `${Date.now()}-${cleanFileName}`;
-      const filePath = path.join(uploadDir, uniqueFileName);
+      if (file && typeof file !== 'string') {
+        // Read design file buffer
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const uniqueFileName = `${Date.now()}-${cleanFileName}`;
+        const filePath = path.join(uploadDir, uniqueFileName);
+        fs.writeFileSync(filePath, buffer);
 
-      // Write file
-      fs.writeFileSync(filePath, buffer);
+        fileName = file.name;
+        fileUrl = `/uploads/designs/${uniqueFileName}`;
+      } else {
+        fileName = formData.get('file_name') || 'Design File';
+        fileUrl = formData.get('file_url');
+        if (!fileUrl) {
+          return Response.json({ error: 'No design file or link provided' }, { status: 400 });
+        }
+      }
 
-      fileName = file.name;
-      fileUrl = `/uploads/designs/${uniqueFileName}`;
+      // Handle optional client design acceptance file
+      const acceptanceFile = formData.get('acceptance_file');
+      const textAccUrl = formData.get('acceptance_file_url');
+      if (acceptanceFile && typeof acceptanceFile !== 'string') {
+        const accBuffer = Buffer.from(await acceptanceFile.arrayBuffer());
+        const cleanAccName = acceptanceFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const uniqueAccName = `acc-${Date.now()}-${cleanAccName}`;
+        const accFilePath = path.join(uploadDir, uniqueAccName);
+        fs.writeFileSync(accFilePath, accBuffer);
+
+        acceptanceFileName = acceptanceFile.name;
+        acceptanceFileUrl = `/uploads/designs/${uniqueAccName}`;
+      } else if (textAccUrl && typeof textAccUrl === 'string' && textAccUrl.trim()) {
+        acceptanceFileName = formData.get('acceptance_file_name') || 'Acceptance Link';
+        acceptanceFileUrl = textAccUrl.trim();
+      }
     } else {
       // JSON body fallback
       const body = await request.json();
@@ -66,6 +85,8 @@ export async function POST(request) {
       fileName = body.file_name || 'Design Layout';
       fileUrl = body.file_url;
       notes = body.notes || '';
+      acceptanceFileName = body.acceptance_file_name || '';
+      acceptanceFileUrl = body.acceptance_file_url || '';
 
       if (!client || !designType || !fileUrl) {
         return Response.json({ error: 'Client, Design Type and File URL are required' }, { status: 400 });
@@ -84,7 +105,9 @@ export async function POST(request) {
       file_name: fileName,
       file_url: fileUrl,
       notes,
-      approval_status: 'pending'
+      approval_status: 'pending',
+      acceptance_file_name: acceptanceFileName || null,
+      acceptance_file_url: acceptanceFileUrl || null
     });
 
     const populated = await Design.findById(design._id).populate('client');

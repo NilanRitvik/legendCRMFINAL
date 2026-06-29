@@ -407,6 +407,61 @@ export default function InstallationPage() {
                 </select>
               </div>
 
+              {form.project && (() => {
+                const selectedProjObj = projects.find(p => p._id === form.project);
+                const clientId = selectedProjObj?.client?._id || selectedProjObj?.client;
+                const projectDesigns = getApprovedDesignsForClient(clientId);
+                if (projectDesigns.length === 0) {
+                  return (
+                    <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '12px', color: '#dc2626', fontWeight: '500' }}>
+                      ⚠️ No approved 2D/3D design plans found for this client. Please upload and approve designs in the 2D & 3D panel first.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      📐 Linked Approved Designs & Plans
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      {projectDesigns.map(d => (
+                        <div key={d._id} style={{ background: '#fff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ fontSize: '12px', color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '180px' }} title={d.file_name}>
+                              {d.file_name}
+                            </strong>
+                            <span className={`badge badge-${d.design_type === '2d' ? 'info' : 'warning'}`} style={{ fontSize: '9px', padding: '2px 6px' }}>
+                              {d.design_type === '2d' ? '2D Layout' : '3D Render'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                            <a
+                              href={d.file_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '11px', padding: '3px 8px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', flex: 1, justifyContent: 'center' }}
+                            >
+                              👁️ View
+                            </a>
+                            <a
+                              href={d.file_url}
+                              download={d.file_name}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '11px', padding: '3px 8px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', flex: 1, justifyContent: 'center' }}
+                            >
+                              📥 Download
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Location Entry */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label>Site Location (Manual Entry)</label>

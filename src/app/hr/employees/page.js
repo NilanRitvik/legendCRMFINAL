@@ -191,7 +191,14 @@ export default function EmployeesPage() {
                         {emp.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontWeight: '700', color: 'var(--text-main)' }}>{emp.name}</div>
+                        <div style={{ fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {emp.name} 
+                          {emp.employee_code && (
+                            <span style={{ fontSize: '10px', color: 'var(--primary)', background: 'var(--primary-light)', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                              #{emp.employee_code}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{emp.designation}</div>
                       </div>
                     </div>
@@ -253,6 +260,16 @@ export default function EmployeesPage() {
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '12px', paddingBottom: '6px', borderBottom: '2px solid var(--primary-light)' }}>Basic Information</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  {editing && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Employee ID / Number</label>
+                      <input 
+                        type="text" disabled 
+                        value={form.employee_code || ''}
+                        style={{ padding: '8px 10px', border: '1px solid var(--card-border)', borderRadius: '7px', fontSize: '13px', background: '#f1f5f9', color: 'var(--text-main)', cursor: 'not-allowed' }} 
+                      />
+                    </div>
+                  )}
                   {F('name', 'Full Name')}
                   {F('designation', 'Designation / Job Title', 'text', DESIGNATION_OPTIONS.map(d => ({ v: d, l: d })))}
                   {F('department', 'Department', 'text', DEPT_OPTIONS.map(d => ({ v: d, l: d })))}

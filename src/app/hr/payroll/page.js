@@ -133,30 +133,53 @@ export default function PayrollPage() {
     const emp = employees.find(e => e._id === freelancerForm.employee);
     if (!emp) return alert('Select a freelancer/consultant.');
     setSavingFl(true);
-    // Calculate
-    const rate = emp.basic_salary || 0;
-    let gross = 0;
-    if (emp.rate_type === 'hourly') gross = rate * (freelancerForm.hours_worked || 0);
-    else gross = rate; // project or monthly
-    const totalDed = (freelancerForm.advance_deduction || 0) + (freelancerForm.other_deduction || 0);
-    const net = Math.max(0, gross - totalDed);
 
-    const res = await fetch('/api/hr/payroll', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        employee: freelancerForm.employee, month, year,
-        basic_salary: gross, gross_salary: gross,
-        advance_deduction: freelancerForm.advance_deduction || 0,
-        other_deduction: freelancerForm.other_deduction || 0,
-        total_deductions: totalDed,
-        net_salary: net, hours_worked: freelancerForm.hours_worked || 0,
-        project_description: freelancerForm.project_description,
-        payment_mode: freelancerForm.payment_mode, notes: freelancerForm.notes,
-        status: 'processed'
-      })
-    });
-    if (res.ok) { setShowFreelancerModal(false); load(); }
+    try {
+      // 1. Upsert attendance record for freelancer/consultant to save working hours
+      await fetch('/api/hr/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee: freelancerForm.employee,
+          month,
+          year,
+          total_working_days: 26,
+          present_days: Math.ceil((freelancerForm.hours_worked || 0) / 8),
+          overtime_hours: freelancerForm.hours_worked || 0
+        })
+      });
+
+      // 2. Create draft payroll document
+      const res = await fetch('/api/hr/payroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee: freelancerForm.employee,
+          month,
+          year,
+          status: 'draft',
+          advance_deduction: freelancerForm.advance_deduction || 0,
+          other_deduction: freelancerForm.other_deduction || 0,
+          payment_mode: freelancerForm.payment_mode,
+          notes: freelancerForm.notes,
+          project_description: freelancerForm.project_description
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // 3. Auto-calculate and transition status to processed
+        await fetch(`/api/hr/payroll/${data._id}/calculate`, { method: 'POST' });
+        setShowFreelancerModal(false);
+        load();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.error || 'Failed to save freelancer payroll'}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save freelancer payment');
+    }
     setSavingFl(false);
   };
 

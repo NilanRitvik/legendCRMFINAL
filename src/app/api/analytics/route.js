@@ -2,7 +2,8 @@ import dbConnect from '@/lib/dbConnect';
 import { 
   Project, Payment, Expense, Client, Team, 
   Design, Manufacturing, QC, Logistics, AMC, 
-  MaterialTransaction, ToolAsset, Machine, Installation 
+  MaterialTransaction, ToolAsset, Machine, Installation,
+  Attendance, WorkLog
 } from '@/lib/models';
 
 export async function GET(request) {
@@ -13,7 +14,8 @@ export async function GET(request) {
     const [
       projects, payments, expenses, clients, teamMembers,
       designs, manufacturing, qcs, logisticsList, amcs,
-      materialTxns, tools, machines, installations
+      materialTxns, tools, machines, installations,
+      allAttendance, allWorkLogs
     ] = await Promise.all([
       Project.find({}).populate('client'),
       Payment.find({}),
@@ -28,7 +30,9 @@ export async function GET(request) {
       MaterialTransaction.find({}),
       ToolAsset.find({}),
       Machine.find({}),
-      Installation.find({})
+      Installation.find({}),
+      Attendance.find({}),
+      WorkLog.find({ approval_status: 'approved' })
     ]);
 
     // 1. Revenue vs Expenses Month-by-Month (Last 12 Months)
@@ -105,23 +109,76 @@ export async function GET(request) {
       const projExpenses = expenses.filter(e => e.project && e.project._id.toString() === p._id.toString());
       const directExpenseTotal = projExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-      const start = p.start_date ? new Date(p.start_date) : new Date(p.createdAt);
-      const end = p.end_date ? new Date(p.end_date) : new Date();
-      const diffMs = Math.max(0, end - start);
-      const durationMonths = Math.max(1, Math.round((diffMs / (1000 * 60 * 60 * 24 * 30.4375)) * 10) / 10);
+      const projIdStr = p._id.toString();
 
+      // Team Cost over project duration using type-aware formulas (in-memory)
       let teamCostTotal = 0;
       if (p.team && Array.isArray(p.team)) {
+        const pStart = p.start_date ? new Date(p.start_date) : new Date(p.createdAt);
+        const pEnd = p.end_date ? new Date(p.end_date) : new Date();
+
+        const monthsActive = [];
+        let current = new Date(pStart.getFullYear(), pStart.getMonth(), 1);
+        while (current <= pEnd) {
+          monthsActive.push({ month: current.getMonth() + 1, year: current.getFullYear() });
+          current.setMonth(current.getMonth() + 1);
+        }
+
         p.team.forEach(alloc => {
-          const memberObj = teamMembers.find(t => t._id.toString() === alloc.member.toString());
-          if (memberObj && memberObj.monthly_cost) {
-            const costPerMonth = memberObj.monthly_cost * (alloc.allocation / 100);
-            teamCostTotal += costPerMonth * durationMonths;
+          const emp = teamMembers.find(t => t._id.toString() === alloc.member.toString());
+          if (emp) {
+            const basic = emp.basic_salary || emp.monthly_cost || 0;
+            let cost = 0;
+
+            if (emp.type === 'employee') {
+              let totalPresentDays = 0;
+              monthsActive.forEach(active => {
+                const att = allAttendance.find(a => 
+                  a.employee.toString() === emp._id.toString() &&
+                  a.month === active.month &&
+                  a.year === active.year
+                );
+                if (att) {
+                  totalPresentDays += att.present_days || 0;
+                } else {
+                  totalPresentDays += 26;
+                }
+              });
+              cost = (basic / 26) * totalPresentDays * (alloc.allocation / 100);
+            } else {
+              const logs = allWorkLogs.filter(l => 
+                l.employee.toString() === emp._id.toString() &&
+                l.project && l.project.toString() === projIdStr
+              );
+              const totalHours = logs.reduce((sum, l) => sum + (l.hours_worked || 0), 0);
+              cost = totalHours * basic;
+            }
+            teamCostTotal += Math.round(cost);
           }
         });
       }
 
-      const profit = p.value - teamCostTotal - directExpenseTotal;
+      // Material Expenses
+      const projMaterials = materialTxns.filter(t => 
+        t.project && t.project.toString() === projIdStr &&
+        t.approval_status === 'approved' &&
+        t.accounts_approved === true
+      );
+      let materialCostTotal = 0;
+      projMaterials.forEach(t => {
+        const rate = t.rate || 0;
+        const qty = t.quantity || 0;
+        const gst = t.gst_percentage || 0;
+        const transport = t.transport_charges || 0;
+        const val = (qty * rate * (1 + gst / 100)) + transport;
+        if (t.transaction_type === 'issue') {
+          materialCostTotal += val;
+        } else if (t.transaction_type === 'return') {
+          materialCostTotal -= val;
+        }
+      });
+
+      const profit = p.value - teamCostTotal - directExpenseTotal - materialCostTotal;
       const margin = p.value > 0 ? Math.round((profit / p.value) * 100) : 0;
 
       return {
@@ -129,6 +186,7 @@ export async function GET(request) {
         client: p.client ? p.client.company : 'N/A',
         value: p.value,
         directExpenses: directExpenseTotal,
+        materialExpenses: materialCostTotal,
         teamCost: teamCostTotal,
         profit,
         margin

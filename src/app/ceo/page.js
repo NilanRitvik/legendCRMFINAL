@@ -52,6 +52,7 @@ export default function CEOPage() {
 
   // --- STATE FOR TEAM TAB ---
   const [team, setTeam] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [teamLoading, setTeamLoading] = useState(true);
   const [newMember, setNewMember] = useState({ name: '', role: '', monthly_cost: '', resource_type: 'fulltime' });
@@ -59,7 +60,7 @@ export default function CEOPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [teamActiveSubTab, setTeamActiveSubTab] = useState('resources'); // resources | logins
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer' });
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer', employeeId: '' });
   const [selectedPages, setSelectedPages] = useState(['dashboard']);
 
   // --- STATE FOR ASSETS TAB ---
@@ -83,6 +84,7 @@ export default function CEOPage() {
   const [customEmailTemplate, setCustomEmailTemplate] = useState(
     `Dear Client,\n\nWe hope this email finds you well.\n\nThis is a notification regarding the outstanding balance on your project: {projectName}.\n\nFinancial Breakdown:\n- Contract Value: ₹{projectValue}\n- Paid Amount: ₹{paidAmount}\n- Remaining Balance: ₹{outstandingDue}\n- Expected Due Date: {dueDate}\n\nPlease transfer the outstanding amount to our bank account at your earliest convenience.\n\nThank you,\nLegend Interiors Support Team\n+91 95975 33099\nlegendinteriorudumalpet@gmail.com`
   );
+  const [reminderModal, setReminderModal] = useState(null);
 
   const handleCloseWakeUp = () => {
     setWakeUpOpen(false);
@@ -230,12 +232,14 @@ export default function CEOPage() {
   const fetchTeamData = async () => {
     try {
       setTeamLoading(true);
-      const [resTeam, resProj] = await Promise.all([
+      const [resTeam, resProj, resEmp] = await Promise.all([
         fetch('/api/team').then(r => r.json()),
-        fetch('/api/projects').then(r => r.json())
+        fetch('/api/projects').then(r => r.json()),
+        fetch('/api/hr/employees?status=active').then(r => r.json())
       ]);
       setTeam(resTeam);
       setProjects(resProj);
+      setEmployees(Array.isArray(resEmp) ? resEmp : []);
       
       const getCookie = (name) => {
         const value = `; ${document.cookie}`;
@@ -407,25 +411,51 @@ export default function CEOPage() {
 
   const handleSendCustomWhatsAppReminder = (r) => {
     let phone = r.clientPhone || '';
-    if (!phone) {
-      phone = window.prompt("Client phone number is missing. Please enter phone number (including country code, e.g. +919597533099):");
-      if (!phone) return;
-    }
-    const cleanPhone = phone.replace(/[^0-9+]/g, '');
     const msg = getFormattedMessage(customReminderTemplate, r);
-    const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+    setReminderModal({
+      type: 'whatsapp',
+      recipient: phone,
+      subject: '',
+      body: msg,
+      project: r
+    });
   };
 
   const handleSendCustomEmailReminder = (r) => {
     const email = r.clientEmail || '';
-    if (!email) {
-      alert("No email address configured for this client.");
-      return;
+    const body = getFormattedMessage(customEmailTemplate, r);
+    setReminderModal({
+      type: 'email',
+      recipient: email,
+      subject: "Payment Reminder: Legend Interiors Project Balance",
+      body: body,
+      project: r
+    });
+  };
+
+  const handleSendReminder = () => {
+    if (!reminderModal) return;
+    
+    if (reminderModal.type === 'whatsapp') {
+      let phone = reminderModal.recipient || '';
+      if (!phone) {
+        alert("Please enter a phone number.");
+        return;
+      }
+      const cleanPhone = phone.replace(/[^0-9+]/g, '');
+      const url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(reminderModal.body)}`;
+      window.open(url, '_blank');
+    } else {
+      let email = reminderModal.recipient || '';
+      if (!email) {
+        alert("Please enter an email address.");
+        return;
+      }
+      const subject = encodeURIComponent(reminderModal.subject);
+      const body = encodeURIComponent(reminderModal.body);
+      window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
     }
-    const subject = encodeURIComponent("Payment Reminder: Legend Interiors Project Balance");
-    const body = encodeURIComponent(getFormattedMessage(customEmailTemplate, r));
-    window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+    setReminderModal(null);
   };
 
   // CSV Report Exporter
@@ -510,11 +540,12 @@ export default function CEOPage() {
           username: newUser.username,
           password: newUser.password,
           role: newUser.role,
+          employeeId: newUser.role === 'supervisor' ? newUser.employeeId : null,
           allowedPages: selectedPages
         })
       });
       if (res.ok) {
-        setNewUser({ username: '', password: '', role: 'viewer' });
+        setNewUser({ username: '', password: '', role: 'viewer', employeeId: '' });
         setSelectedPages(['dashboard']);
         fetchUsers();
         alert('User login created successfully!');
@@ -524,6 +555,32 @@ export default function CEOPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleChangePassword = async (id, username) => {
+    const newPassword = prompt(`Enter new password for user "${username}":`);
+    if (newPassword === null) return;
+    if (!newPassword.trim()) {
+      alert("Password cannot be empty.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword.trim() })
+      });
+      if (res.ok) {
+        fetchUsers();
+        alert(`Password for user "${username}" updated successfully!`);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to update password');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error updating password.');
     }
   };
 
@@ -1713,7 +1770,7 @@ export default function CEOPage() {
           </div>
 
           {/* Template Editors & Receivables List */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.24fr 1fr', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
             
             {/* Outstanding Receivables List */}
             <div className="panel" style={{ margin: 0 }}>
@@ -1830,51 +1887,10 @@ export default function CEOPage() {
                     )}
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            {/* Template Customize Editors */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              <div className="panel" style={{ margin: 0 }}>
-                <div className="panel-header">
-                  <h2 className="panel-title">💬 WhatsApp Reminder Template</h2>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
-                    Customize the message sent via WhatsApp. Available tokens: <code>{"{projectName}"}</code>, <code>{"{clientCompany}"}</code>, <code>{"{todayDate}"}</code>, <code>{"{projectValue}"}</code>, <code>{"{paidAmount}"}</code>, <code>{"{outstandingDue}"}</code>, <code>{"{dueDate}"}</code>.
-                  </p>
-                  <textarea
-                    className="form-control"
-                    rows="8"
-                    value={customReminderTemplate}
-                    onChange={e => setCustomReminderTemplate(e.target.value)}
-                    style={{ fontSize: '12px', fontFamily: 'monospace', padding: '10px', borderRadius: '8px', lineHeight: '1.4', background: '#fafafa' }}
-                  />
-                </div>
-              </div>
-
-              <div className="panel" style={{ margin: 0 }}>
-                <div className="panel-header">
-                  <h2 className="panel-title">✉️ Email Reminder Template</h2>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
-                    Customize the message sent via Email. Same tokens are supported.
-                  </p>
-                  <textarea
-                    className="form-control"
-                    rows="8"
-                    value={customEmailTemplate}
-                    onChange={e => setCustomEmailTemplate(e.target.value)}
-                    style={{ fontSize: '12px', fontFamily: 'monospace', padding: '10px', borderRadius: '8px', lineHeight: '1.4', background: '#fafafa' }}
-                  />
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ============ TAB: TEAM & LOGINS ============ */}
@@ -2110,12 +2126,19 @@ export default function CEOPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map(u => (
+                         {users.map(u => (
                           <tr key={u._id}>
-                            <td style={{ fontWeight: '700', textTransform: 'capitalize' }}>{u.username}</td>
+                            <td style={{ fontWeight: '700', textTransform: 'capitalize' }}>
+                              {u.username}
+                              {u.employeeId && (
+                                <div style={{ fontSize: '11px', fontWeight: 'normal', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  👤 Linked: {u.employeeId.name}
+                                </div>
+                              )}
+                            </td>
                             <td><code>{u.password}</code></td>
                             <td>
-                              <span className={`badge badge-${u.role === 'admin' ? 'success' : u.role === 'manager' ? 'info' : 'secondary'}`} style={{ textTransform: 'capitalize', fontSize: '10px' }}>
+                              <span className={`badge badge-${u.role === 'admin' ? 'success' : u.role === 'manager' ? 'info' : u.role === 'supervisor' ? 'warning' : 'secondary'}`} style={{ textTransform: 'capitalize', fontSize: '10px' }}>
                                 {u.role}
                               </span>
                             </td>
@@ -2136,7 +2159,14 @@ export default function CEOPage() {
                               </div>
                             </td>
                             <td>
-                              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                <button 
+                                  className="btn btn-sm btn-secondary" 
+                                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                                  onClick={() => handleChangePassword(u._id, u.username)}
+                                >
+                                  🔑 Pass
+                                </button>
                                 <button 
                                   className="btn btn-sm btn-danger" 
                                   style={{ padding: '4px 8px', fontSize: '11px' }}
@@ -2160,13 +2190,41 @@ export default function CEOPage() {
                   </div>
                   <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div className="form-group">
-                      <label style={{ fontSize: '11px' }}>Username</label>
-                      <input 
-                        type="text" className="form-control" required placeholder="E.g. designer_jane"
-                        value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })}
-                        style={{ padding: '8px 12px', fontSize: '12px' }}
-                      />
+                      <label style={{ fontSize: '11px' }}>Select Employee Name</label>
+                      <select 
+                        className="form-control" 
+                        required
+                        value={newUser.employeeId || ''} 
+                        onChange={e => {
+                          const empId = e.target.value;
+                          const emp = employees.find(emp => emp._id === empId);
+                          setNewUser({
+                            ...newUser,
+                            employeeId: empId,
+                            username: emp ? emp.employee_code : ''
+                          });
+                        }}
+                        style={{ padding: '8px 12px', fontSize: '12px', background: '#fff' }}
+                      >
+                        <option value="">-- Choose Full-time Employee --</option>
+                        {employees.filter(emp => emp.type === 'employee').map(emp => (
+                          <option key={emp._id} value={emp._id}>
+                            {emp.name} (Code: {emp.employee_code || emp._id.slice(-5).toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
+                    <div className="form-group">
+                      <label style={{ fontSize: '11px' }}>Captured Username (Employee Code)</label>
+                      <input 
+                        type="text" className="form-control" required disabled
+                        value={newUser.username} 
+                        style={{ padding: '8px 12px', fontSize: '12px', background: '#f1f5f9' }}
+                      />
+                      <small style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Automatically captured from selected employee</small>
+                    </div>
+
                     <div className="form-group">
                       <label style={{ fontSize: '11px' }}>Password</label>
                       <input 
@@ -2179,11 +2237,18 @@ export default function CEOPage() {
                       <label style={{ fontSize: '11px' }}>System Access Role</label>
                       <select 
                         className="form-control"
-                        value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                        value={newUser.role} onChange={e => {
+                          const role = e.target.value;
+                          setNewUser({ ...newUser, role });
+                          if (role === 'supervisor') {
+                            setSelectedPages(['supervisor']);
+                          }
+                        }}
                         style={{ padding: '8px 12px', fontSize: '12px' }}
                       >
                         <option value="viewer">Viewer (View-only, restricted tabs)</option>
                         <option value="manager">Manager (Read & edit, restricted tabs)</option>
+                        <option value="supervisor">Supervisor (Daily attendance logs entry)</option>
                         <option value="admin">Administrator (Full control & User Management)</option>
                       </select>
                     </div>
@@ -2211,6 +2276,8 @@ export default function CEOPage() {
                           { key: 'hr-leaves', label: '🏖️ HR — Leaves' },
                           { key: 'hr-attendance', label: '✅ HR — Attendance' },
                           { key: 'hr-payroll', label: '💵 HR — Payroll' },
+                          { key: 'supervisor', label: '👷 Supervisor Portal' },
+                          { key: 'supervisor-input', label: '📋 Supervisor Logs (HR)' },
                         ].map(page => {
                           const isChecked = selectedPages.includes(page.key);
                           return (
@@ -3247,6 +3314,91 @@ Register Asset & Auto-Log Expense
 
       {/* Render breakup modal details */}
       {selectedBreakup && renderBreakupModal()}
+
+      {/* ============ PAYMENT REMINDER PREVIEW MODAL ============ */}
+      {reminderModal && (
+        <div 
+          className="modal-backdrop" 
+          style={{ zIndex: 1400 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setReminderModal(null); }}
+        >
+          <div className="modal-content" style={{ maxWidth: '600px', padding: '24px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {reminderModal.type === 'whatsapp' ? '💬 WhatsApp Reminder Preview' : '✉️ Email Reminder Preview'}
+              </h3>
+              <button type="button" className="modal-close" onClick={() => setReminderModal(null)}>×</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                  Recipient {reminderModal.type === 'whatsapp' ? 'Phone Number' : 'Email Address'}
+                </label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  value={reminderModal.recipient} 
+                  onChange={e => setReminderModal({ ...reminderModal, recipient: e.target.value })}
+                  placeholder={reminderModal.type === 'whatsapp' ? 'E.g. +919597533099' : 'E.g. client@example.com'}
+                  style={{ padding: '10px 14px', fontSize: '13px', borderRadius: '8px' }}
+                />
+              </div>
+
+              {reminderModal.type === 'email' && (
+                <div className="form-group">
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>Email Subject</label>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value={reminderModal.subject} 
+                    onChange={e => setReminderModal({ ...reminderModal, subject: e.target.value })}
+                    style={{ padding: '10px 14px', fontSize: '13px', borderRadius: '8px' }}
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>Message Body</label>
+                <textarea 
+                  className="form-control" 
+                  rows="10" 
+                  value={reminderModal.body} 
+                  onChange={e => setReminderModal({ ...reminderModal, body: e.target.value })}
+                  style={{ fontSize: '13px', fontFamily: 'monospace', padding: '10px', borderRadius: '8px', lineHeight: '1.4', background: '#fafafa', width: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="btn btn-secondary" onClick={() => setReminderModal(null)}>Cancel</button>
+              <button 
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  navigator.clipboard.writeText(reminderModal.body);
+                  alert('Message body copied to clipboard!');
+                }}
+                style={{ fontWeight: '700' }}
+              >
+                📋 Copy Message
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleSendReminder}
+                style={{
+                  backgroundColor: reminderModal.type === 'whatsapp' ? '#25D366' : 'var(--primary)',
+                  borderColor: reminderModal.type === 'whatsapp' ? '#25D366' : 'var(--primary)',
+                  color: '#fff',
+                  fontWeight: '700'
+                }}
+              >
+                {reminderModal.type === 'whatsapp' ? '💬 Send WhatsApp' : '✉️ Open Email Client'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

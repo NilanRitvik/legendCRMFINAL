@@ -3,6 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import DBStatusBanner from "@/components/DBStatusBanner";
+import NueraAssistant from "@/components/NueraAssistant";
 
 const outfit = Outfit({
   variable: "--font-geist-sans",
@@ -57,6 +58,7 @@ export default function RootLayout({ children }) {
             </main>
           </div>
         </div>
+        <NueraAssistant />
       </body>
     </html>
   );

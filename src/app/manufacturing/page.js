@@ -50,6 +50,8 @@ export default function ManufacturingPage() {
   const [returnQty, setReturnQty] = useState(0);
   const [materialName, setMaterialName] = useState('');
   const [issuedQty, setIssuedQty] = useState(0);
+  const [materialUnit, setMaterialUnit] = useState('pcs');
+  const [returnQtyMap, setReturnQtyMap] = useState({});
 
   // Missing States for report modals and searches
   const [selectedMfgForReport, setSelectedMfgForReport] = useState(null);
@@ -63,10 +65,23 @@ export default function ManufacturingPage() {
   const [showScheduleMfgModal, setShowScheduleMfgModal] = useState(false);
   const [showCreateQcModal, setShowCreateQcModal] = useState(false);
   const [showScheduleLogisticsModal, setShowScheduleLogisticsModal] = useState(false);
+  const [approvedDesigns, setApprovedDesigns] = useState([]);
+  const [viewChallanIssue, setViewChallanIssue] = useState(null);
+  const [allTransactions, setAllTransactions] = useState([]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      // Fetch approved designs
+      const resDesigns = await fetch('/api/designing');
+      const dataDesigns = await resDesigns.json();
+      setApprovedDesigns(Array.isArray(dataDesigns) ? dataDesigns : []);
+
+      // Fetch all stock transactions
+      const resPurch = await fetch('/api/purchase');
+      const dataPurch = await resPurch.json();
+      setAllTransactions(Array.isArray(dataPurch?.transactions) ? dataPurch.transactions : []);
+
       if (activeTab === 'manufacturing') {
         const res = await fetch('/api/manufacturing');
         const data = await res.json();
@@ -94,6 +109,63 @@ export default function ManufacturingPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getApprovedDesignsForClient = (clientId) => {
+    if (!clientId) return [];
+    return approvedDesigns.filter(d => 
+      d.approval_status === 'approved' &&
+      (d.client?._id === clientId || d.client === clientId)
+    );
+  };
+
+  const getDynamicQtyLabel = (unit) => {
+    switch (unit) {
+      case 'pcs': return 'pieces';
+      case 'mtr': return 'meters';
+      case 'kg': return 'kilograms';
+      case 'ltr': return 'litres';
+      case 'cm': return 'centimeters';
+      case 'inch': return 'inches';
+      case 'mm': return 'millimeters';
+      case 'rft': return 'running feet';
+      case 'sqt': return 'square feet';
+      case 'box': return 'boxes';
+      default: return 'qty';
+    }
+  };
+
+  const handleDownloadIssueChallan = (issue) => {
+    if (!issue) return;
+    const content = `
+LEGEND INTERIORS - MATERIAL DISPATCH CHALLAN
+============================================
+Transaction ID : ${issue._id.toUpperCase()}
+Project        : ${issue.project?.name || 'N/A'}
+Client         : ${issue.project?.client?.company || 'N/A'}
+Date Issued    : ${new Date(issue.date || issue.createdAt).toLocaleDateString('en-IN')}
+
+DISPATCHED ITEMS:
+--------------------------------------------
+Material       : ${issue.material_name}
+Brand          : ${issue.material_brand || 'N/A'}
+Quantity       : ${issue.quantity} ${issue.unit}
+
+REMARKS:
+--------------------------------------------
+${issue.notes || 'No remarks'}
+
+--------------------------------------------
+Authorized Signature: Legend Interiors Stock Room
+`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `material_issue_${issue._id.slice(-6).toUpperCase()}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -173,24 +245,28 @@ export default function ManufacturingPage() {
     }
 
     try {
-      // 1. If surplus return quantity is specified, log the return transaction
-      if (returnQty > 0) {
+      // 1. If surplus return quantities are specified, log return transactions for each
+      const returnEntries = Object.entries(returnQtyMap).filter(([id, qty]) => qty > 0);
+      for (const [txnId, qty] of returnEntries) {
+        const sourceTxn = allTransactions.find(t => t._id === txnId);
+        if (!sourceTxn) continue;
         const projectId = mfgJob.project?._id || mfgJob.project;
+        
         const returnRes = await fetch('/api/purchase', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'add_return',
-            material_name: materialName,
-            quantity: returnQty,
+            material_name: sourceTxn.material_name,
+            quantity: qty,
             project: projectId,
-            notes: `Auto-returned surplus material from completed Manufacturing Run: ${finishNotes || 'No remarks'}`
+            notes: `Auto-returned surplus material (${sourceTxn.material_name}) from completed Manufacturing Run. Ref issue ID: ${txnId}`
           })
         });
         
         if (!returnRes.ok) {
           const returnErr = await returnRes.json();
-          return alert(`Failed to log surplus return: ${returnErr.error || 'Unknown error'}`);
+          return alert(`Failed to log surplus return for ${sourceTxn.material_name}: ${returnErr.error || 'Unknown error'}`);
         }
       }
 
@@ -703,7 +779,21 @@ export default function ManufacturingPage() {
                                           setFinishTime(new Date().toTimeString().split(' ')[0].slice(0, 5));
                                           setMaterialName(m.material_issue?.material_name || '');
                                           setIssuedQty(m.material_issue?.quantity || 0);
+                                          setMaterialUnit(m.material_issue?.unit || 'pcs');
                                           setReturnQty(0);
+
+                                          // Load all project approved issues
+                                          const projectIssues = allTransactions.filter(t => 
+                                            t.transaction_type === 'issue' && 
+                                            t.approval_status === 'approved' && 
+                                            (t.project?._id === m.project?._id || t.project === m.project?._id || 
+                                             t.project?._id === m.project || t.project === m.project)
+                                          );
+                                          const initialMap = {};
+                                          projectIssues.forEach(t => {
+                                            initialMap[t._id] = 0;
+                                          });
+                                          setReturnQtyMap(initialMap);
                                         }}
                                         style={{ padding: '4px 8px', fontSize: '11px', background: '#ca8a04' }}
                                       >
@@ -1024,6 +1114,89 @@ export default function ManufacturingPage() {
                 </select>
               </div>
 
+              {selectedIssueId && (() => {
+                const selectedIssue = pendingIssues.find(i => i._id === selectedIssueId);
+                if (!selectedIssue) return null;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#fefce8', padding: '10px', borderRadius: '8px', border: '1px solid #fef08a' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '800', color: '#b45309', textTransform: 'uppercase' }}>
+                      📦 Linked Stock Issue Details
+                    </span>
+                    <div style={{ background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #fef08a', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <strong>Material:</strong>
+                        <span>{selectedIssue.material_name} ({selectedIssue.material_brand || 'No brand'})</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <strong>Quantity Issued:</strong>
+                        <span style={{ fontWeight: '800', color: 'var(--primary)' }}>{selectedIssue.quantity} {selectedIssue.unit}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <strong>Date Dispatched:</strong>
+                        <span>{new Date(selectedIssue.date || selectedIssue.createdAt).toLocaleDateString('en-IN')}</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => setViewChallanIssue(selectedIssue)}
+                          style={{ padding: '3px 8px', fontSize: '10.5px' }}
+                        >
+                          👁️ View Challan
+                        </button>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => handleDownloadIssueChallan(selectedIssue)}
+                          style={{ padding: '3px 8px', fontSize: '10.5px' }}
+                        >
+                          📥 Download Challan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {selectedIssueId && (() => {
+                const selectedIssue = pendingIssues.find(i => i._id === selectedIssueId);
+                const client_id = selectedIssue?.project?.client?._id || selectedIssue?.project?.client;
+                const projectDesigns = getApprovedDesignsForClient(client_id);
+                if (projectDesigns.length === 0) {
+                  return (
+                    <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '11px', color: '#dc2626', fontWeight: '500' }}>
+                      ⚠️ No approved 2D/3D design plans found for this client. Please upload/approve designs in the 2D & 3D panel first.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      📐 Linked Approved Designs & Plans
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {projectDesigns.map(d => (
+                        <div key={d._id} style={{ background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                          <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                            <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={d.file_name}>
+                              {d.file_name}
+                            </strong>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {d.design_type === '2d' ? '📐 2D Layout Plan' : '🕶️ 3D Perspective'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>👁️ View</a>
+                            <a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>📥 Down</a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: '800' }}>Start Date</label>
@@ -1092,6 +1265,44 @@ export default function ManufacturingPage() {
                   ))}
                 </select>
               </div>
+
+              {selectedMfgId && (() => {
+                const selectedMfg = pendingMfg.find(m => m._id === selectedMfgId);
+                const client_id = selectedMfg?.project?.client?._id || selectedMfg?.project?.client;
+                const projectDesigns = getApprovedDesignsForClient(client_id);
+                if (projectDesigns.length === 0) {
+                  return (
+                    <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '11px', color: '#dc2626', fontWeight: '500' }}>
+                      ⚠️ No approved 2D/3D design plans found for this client. Please upload/approve designs in the 2D & 3D panel first.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      📐 Linked Approved Designs & Plans
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {projectDesigns.map(d => (
+                        <div key={d._id} style={{ background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                          <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                            <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={d.file_name}>
+                              {d.file_name}
+                            </strong>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {d.design_type === '2d' ? '📐 2D Layout Plan' : '🕶️ 3D Perspective'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>👁️ View</a>
+                            <a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>📥 Down</a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <label style={{ fontSize: '11px', fontWeight: '800', display: 'block', marginBottom: '8px', color: 'var(--primary)' }}>QA checklist items</label>
@@ -1214,6 +1425,44 @@ export default function ManufacturingPage() {
                   ))}
                 </select>
               </div>
+
+              {selectedQcId && (() => {
+                const selectedQc = pendingQc.find(q => q._id === selectedQcId);
+                const client_id = selectedQc?.project?.client?._id || selectedQc?.project?.client;
+                const projectDesigns = getApprovedDesignsForClient(client_id);
+                if (projectDesigns.length === 0) {
+                  return (
+                    <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '11px', color: '#dc2626', fontWeight: '500' }}>
+                      ⚠️ No approved 2D/3D design plans found for this client. Please upload/approve designs in the 2D & 3D panel first.
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      📐 Linked Approved Designs & Plans
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {projectDesigns.map(d => (
+                        <div key={d._id} style={{ background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                          <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                            <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={d.file_name}>
+                              {d.file_name}
+                            </strong>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {d.design_type === '2d' ? '📐 2D Layout Plan' : '🕶️ 3D Perspective'}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>👁️ View</a>
+                            <a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>📥 Down</a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="form-group">
                 <label style={{ fontSize: '11px', fontWeight: '800' }}>Item Description</label>
@@ -1338,27 +1587,60 @@ export default function ManufacturingPage() {
                 />
               </div>
 
-              {materialName && (
-                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--primary)' }}>♻️ Return surplus materials?</span>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    <strong>Material:</strong> {materialName}<br/>
-                    <strong>Allocated/Issued:</strong> {issuedQty} pcs
+              {(() => {
+                const mfgJob = manufacturingList.find(job => job._id === finishModalId);
+                if (!mfgJob) return null;
+                const projectIssues = allTransactions.filter(t => 
+                  t.transaction_type === 'issue' && 
+                  t.approval_status === 'approved' && 
+                  (t.project?._id === mfgJob.project?._id || t.project === mfgJob.project?._id || 
+                   t.project?._id === mfgJob.project || t.project === mfgJob.project)
+                );
+
+                if (projectIssues.length === 0) return null;
+
+                return (
+                  <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--primary)' }}>♻️ Return surplus materials?</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {projectIssues.map(iss => {
+                        const maxVal = iss.quantity;
+                        const val = returnQtyMap[iss._id] || 0;
+                        return (
+                          <div key={iss._id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                              <strong>Material:</strong> {iss.material_name} ({iss.material_brand || 'No brand'})<br/>
+                              <strong>Allocated/Issued:</strong> {iss.quantity} {iss.unit}
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label style={{ fontSize: '9.5px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                                Return Qty ({getDynamicQtyLabel(iss.unit)})
+                              </label>
+                              <input
+                                type="number"
+                                step="any"
+                                className="form-control"
+                                min="0"
+                                max={maxVal}
+                                value={val}
+                                placeholder={`How many ${getDynamicQtyLabel(iss.unit)}?`}
+                                onChange={e => {
+                                  const inputVal = Math.min(maxVal, Math.max(0, parseFloat(e.target.value) || 0));
+                                  setReturnQtyMap(prev => ({
+                                    ...prev,
+                                    [iss._id]: inputVal
+                                  }));
+                                }}
+                                style={{ padding: '4px 8px', fontSize: '12px' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label style={{ fontSize: '11px', fontWeight: '800' }}>Quantity to Return</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      min="0"
-                      max={issuedQty}
-                      value={returnQty}
-                      onChange={e => setReturnQty(Math.min(issuedQty, Math.max(0, parseInt(e.target.value) || 0)))}
-                      style={{ padding: '4px 8px', fontSize: '12px' }}
-                    />
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="form-group">
                 <label style={{ fontSize: '11px', fontWeight: '800' }}>Production Remarks</label>
@@ -2278,6 +2560,68 @@ export default function ManufacturingPage() {
                 Legend Interiors — Premium Cargo Delivery & Logistics Challan.
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewChallanIssue && (
+        <div className="modal-backdrop" style={{ zIndex: 1300 }}>
+          <div className="modal-content" style={{ maxWidth: '450px', padding: '24px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+              <h3 className="modal-title" style={{ fontSize: '14px', fontWeight: 'bold' }}>📄 Material Dispatch Challan</h3>
+              <button type="button" className="modal-close" onClick={() => setViewChallanIssue(null)}>×</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px', fontSize: '13px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                <h4 style={{ margin: 0, fontWeight: '800', color: 'var(--text-main)' }}>LEGEND INTERIORS</h4>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Premium Cargo Dispatch Challan</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                <div><strong>Transaction ID:</strong> <code style={{ fontSize: '11px' }}>{viewChallanIssue._id.toUpperCase()}</code></div>
+                <div><strong>Project:</strong> {viewChallanIssue.project?.name || 'N/A'}</div>
+                <div><strong>Client Company:</strong> {viewChallanIssue.project?.client?.company || 'N/A'}</div>
+                <div><strong>Dispatch Date:</strong> {new Date(viewChallanIssue.date || viewChallanIssue.createdAt).toLocaleDateString('en-IN')}</div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px dashed #cbd5e1', borderBottom: '1px dashed #cbd5e1', padding: '10px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>Material Dispatched</strong>
+                  <strong>Qty</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+                  <span>{viewChallanIssue.material_name} ({viewChallanIssue.material_brand || 'No brand'})</span>
+                  <strong>{viewChallanIssue.quantity} {viewChallanIssue.unit}</strong>
+                </div>
+              </div>
+
+              {viewChallanIssue.notes && (
+                <div>
+                  <strong>Dispatch Notes:</strong>
+                  <div style={{ background: '#fafafa', padding: '8px', borderRadius: '6px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {viewChallanIssue.notes}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '15px', fontStyle: 'italic' }}>
+                Authorized Signature: Legend Interiors Stock Room
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setViewChallanIssue(null)}>Close</button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={() => {
+                  handleDownloadIssueChallan(viewChallanIssue);
+                }}
+              >
+                📥 Download
+              </button>
             </div>
           </div>
         </div>

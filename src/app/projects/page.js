@@ -17,6 +17,12 @@ export default function ProjectsPage() {
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [directProjectExpenses, setDirectProjectExpenses] = useState([]);
+  const [projectMaterials, setProjectMaterials] = useState([]);
+  const [editingMaterial, setEditingMaterial] = useState(null);
+  const [editMaterialQty, setEditMaterialQty] = useState('');
+  const [editMaterialRate, setEditMaterialRate] = useState('');
+  const [editMaterialGst, setEditMaterialGst] = useState('');
+  const [editMaterialTransport, setEditMaterialTransport] = useState('');
   
   // Forms
   const [newProject, setNewProject] = useState({
@@ -110,6 +116,15 @@ export default function ProjectsPage() {
         setSelectedProject(dataSingle);
         setDirectProjectExpenses(dataSingle.directExpensesList || []);
       }
+
+      // Fetch material transactions
+      const resPurch = await fetch('/api/purchase');
+      const dataPurch = await resPurch.json();
+      const validTxns = Array.isArray(dataPurch?.transactions) ? dataPurch.transactions : [];
+      setProjectMaterials(validTxns.filter(t => 
+        (t.transaction_type === 'issue' || t.transaction_type === 'return') &&
+        t.project && (t.project._id === projectId || t.project === projectId)
+      ));
     } catch (err) {
       console.error(err);
     }
@@ -368,6 +383,61 @@ export default function ProjectsPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleApproveMaterial = async (txnId, approve = true) => {
+    try {
+      const res = await fetch('/api/purchase', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: txnId,
+          action: 'update_project_material',
+          accounts_approved: approve
+        })
+      });
+      if (res.ok) {
+        await fetchProjectDetails(selectedProject._id);
+        fetchInitialData();
+      } else {
+        const err = await res.json();
+        alert(`Failed to approve: ${err.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error updating approval status');
+    }
+  };
+
+  const handleSaveEditMaterial = async (e) => {
+    e.preventDefault();
+    if (!editingMaterial) return;
+
+    try {
+      const res = await fetch('/api/purchase', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingMaterial._id,
+          action: 'update_project_material',
+          quantity: Number(editMaterialQty),
+          rate: Number(editMaterialRate),
+          gst_percentage: Number(editMaterialGst),
+          transport_charges: Number(editMaterialTransport)
+        })
+      });
+      if (res.ok) {
+        setEditingMaterial(null);
+        await fetchProjectDetails(selectedProject._id);
+        fetchInitialData();
+      } else {
+        const err = await res.json();
+        alert(`Failed to save: ${err.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error editing material transaction');
     }
   };
 
@@ -764,53 +834,67 @@ export default function ProjectsPage() {
             </div>
 
             {/* Project P&L Dashboard Panel */}
-            <div style={{
-              backgroundColor: 'var(--primary-light)',
-              border: '1px solid var(--primary-border)',
-              borderRadius: '8px',
-              padding: '20px',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '16px'
-            }}>
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Contract Value</span>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>
-                  ₹{selectedProject.value.toLocaleString()}
-                </div>
-              </div>
-              
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Team Costs ({selectedProject.durationMonths || 1} mo)</span>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--danger)', marginTop: '4px' }}>
-                  -₹{Math.round(selectedProject.teamCost || 0).toLocaleString()}
-                </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-light)' }}>Based on resource allocations</span>
-              </div>
-
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Direct Expenses</span>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--danger)', marginTop: '4px' }}>
-                  -₹{Math.round(selectedProject.directExpenses || 0).toLocaleString()}
-                </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-light)' }}>Hardware/Hosting/Licensing</span>
-              </div>
-
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Project Net Profit</span>
-                <div style={{ 
-                  fontSize: '22px', 
-                  fontWeight: '800', 
-                  color: (selectedProject.projectProfit || 0) >= 0 ? 'var(--success)' : 'var(--danger)', 
-                  marginTop: '4px' 
+            {(() => {
+              const netProfit = selectedProject.value - (selectedProject.teamCost || 0) - (selectedProject.directExpenses || 0) - (selectedProject.materialExpenses || 0);
+              const profitMargin = selectedProject.value > 0 ? Math.round((netProfit / selectedProject.value) * 100) : 0;
+              return (
+                <div style={{
+                  backgroundColor: 'var(--primary-light)',
+                  border: '1px solid var(--primary-border)',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '16px'
                 }}>
-                  {(selectedProject.projectProfit || 0) < 0 ? '-' : ''}₹{Math.abs(Math.round(selectedProject.projectProfit || 0)).toLocaleString()}
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Contract Value</span>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>
+                      ₹{selectedProject.value.toLocaleString()}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Team Costs ({selectedProject.durationMonths || 1} mo)</span>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--danger)', marginTop: '4px' }}>
+                      -₹{Math.round(selectedProject.teamCost || 0).toLocaleString()}
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-light)' }}>Based on resource allocations</span>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Direct Expenses</span>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--danger)', marginTop: '4px' }}>
+                      -₹{Math.round(selectedProject.directExpenses || 0).toLocaleString()}
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-light)' }}>Hardware/Hosting/Licensing</span>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Material Cost (Approved)</span>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--danger)', marginTop: '4px' }}>
+                      -₹{Math.round(selectedProject.materialExpenses || 0).toLocaleString()}
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-light)' }}>Net issues minus returns</span>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Project Net Profit</span>
+                    <div style={{ 
+                      fontSize: '22px', 
+                      fontWeight: '800', 
+                      color: netProfit >= 0 ? 'var(--success)' : 'var(--danger)', 
+                      marginTop: '4px' 
+                    }}>
+                      {netProfit < 0 ? '-' : ''}₹{Math.abs(Math.round(netProfit)).toLocaleString()}
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: netProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {profitMargin}% Profit Margin
+                    </span>
+                  </div>
                 </div>
-                <span style={{ fontSize: '11px', fontWeight: '700', color: (selectedProject.projectProfit || 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  {selectedProject.value > 0 ? Math.round(((selectedProject.projectProfit || 0) / selectedProject.value) * 100) : 0}% Profit Margin
-                </span>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Main Tabs/Panels inside Detail Modal */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', marginTop: '20px' }}>
@@ -818,6 +902,117 @@ export default function ProjectsPage() {
               {/* Left Column: Expenses, Documents, Team Allocations, History Log */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 
+                {/* 📦 Material Allocation & Return Ledger */}
+                <div style={{ border: '1px solid var(--card-border)', borderRadius: '8px', padding: '16px', background: '#fff' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📦 Material Allocation Ledger (Project Accounting)
+                  </h4>
+                  
+                  <div className="table-container">
+                    <table className="table-list" style={{ fontSize: '11.5px' }}>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Material</th>
+                          <th>Type</th>
+                          <th>Qty</th>
+                          <th>Rate (₹)</th>
+                          <th>GST</th>
+                          <th>Transport</th>
+                          <th>Total Cost</th>
+                          <th>Acct Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projectMaterials.map(t => {
+                          const rate = t.rate || 0;
+                          const qty = t.quantity || 0;
+                          const gst = t.gst_percentage || 0;
+                          const transport = t.transport_charges || 0;
+                          const val = (qty * rate * (1 + gst / 100)) + transport;
+                          const isReturn = t.transaction_type === 'return';
+
+                          return (
+                            <tr key={t._id}>
+                              <td>{new Date(t.date || t.createdAt).toLocaleDateString('en-IN')}</td>
+                              <td>
+                                <strong>{t.material_name}</strong>
+                                <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{t.material_brand || 'No brand'}</div>
+                              </td>
+                              <td>
+                                <span className={`badge badge-${isReturn ? 'success' : 'danger'}`} style={{ fontSize: '9px', padding: '1px 4px' }}>
+                                  {isReturn ? '♻️ Return' : '📤 Issue'}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: '700' }}>{qty} {t.unit}</td>
+                              <td>₹{rate.toLocaleString()}</td>
+                              <td>{gst}%</td>
+                              <td>₹{transport.toLocaleString()}</td>
+                              <td style={{ fontWeight: '800', color: isReturn ? '#10b981' : '#ef4444' }}>
+                                {isReturn ? '+' : '-'}₹{val.toLocaleString()}
+                              </td>
+                              <td>
+                                <span style={{
+                                  padding: '2px 5px',
+                                  borderRadius: '4px',
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  background: t.accounts_approved ? '#ecfdf5' : '#fffbeb',
+                                  color: t.accounts_approved ? '#10b981' : '#b45309'
+                                }}>
+                                  {t.accounts_approved ? 'Approved' : 'Pending Audit'}
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button 
+                                    className="btn btn-sm btn-secondary" 
+                                    onClick={() => {
+                                      setEditingMaterial(t);
+                                      setEditMaterialQty(t.quantity);
+                                      setEditMaterialRate(t.rate || 0);
+                                      setEditMaterialGst(t.gst_percentage || 0);
+                                      setEditMaterialTransport(t.transport_charges || 0);
+                                    }}
+                                    style={{ padding: '2px 5px', fontSize: '9.5px' }}
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                  {t.accounts_approved ? (
+                                    <button 
+                                      className="btn btn-sm btn-danger" 
+                                      onClick={() => handleApproveMaterial(t._id, false)}
+                                      style={{ padding: '2px 5px', fontSize: '9.5px', background: '#ef4444', color: '#fff' }}
+                                    >
+                                      Revert
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      className="btn btn-sm btn-primary" 
+                                      onClick={() => handleApproveMaterial(t._id, true)}
+                                      style={{ padding: '2px 5px', fontSize: '9.5px', background: '#10b981', borderColor: '#10b981' }}
+                                    >
+                                      Approve
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {projectMaterials.length === 0 && (
+                          <tr>
+                            <td colSpan="10" style={{ textAlign: 'center', color: 'var(--text-light)', padding: '16px' }}>
+                              No material allocations logged for this project.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
                 {/* Direct Project Expenses section */}
                 <div style={{ border: '1px solid var(--card-border)', borderRadius: '8px', padding: '16px' }}>
                   <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', color: 'var(--text-main)' }}>
@@ -1367,6 +1562,63 @@ export default function ProjectsPage() {
               <button className="btn btn-secondary btn-sm" onClick={() => setIsDetailModalOpen(false)}>Close Workspace</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Edit Material Cost Modal */}
+      {editingMaterial && (
+        <div className="modal-backdrop" style={{ zIndex: 1200 }}>
+          <form className="modal-content" onSubmit={handleSaveEditMaterial} style={{ maxWidth: '400px', padding: '24px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">✏️ Edit Material Cost Details</h3>
+              <button type="button" className="modal-close" onClick={() => setEditingMaterial(null)}>×</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+              <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}>
+                <strong>Material:</strong> {editingMaterial.material_name}<br/>
+                <strong>Category:</strong> {editingMaterial.transaction_type === 'issue' ? '📤 Issue' : '♻️ Return'}
+              </div>
+
+              <div className="form-group">
+                <label>Quantity</label>
+                <input 
+                  type="number" step="any" className="form-control" required
+                  value={editMaterialQty} onChange={e => setEditMaterialQty(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Unit Rate (₹)</label>
+                <input 
+                  type="number" step="any" className="form-control" required
+                  value={editMaterialRate} onChange={e => setEditMaterialRate(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label>GST Percentage (%)</label>
+                  <input 
+                    type="number" className="form-control" required
+                    value={editMaterialGst} onChange={e => setEditMaterialGst(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Transport Charges (₹)</label>
+                  <input 
+                    type="number" className="form-control" required
+                    value={editMaterialTransport} onChange={e => setEditMaterialTransport(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditingMaterial(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save Changes</button>
+            </div>
+          </form>
         </div>
       )}
     </div>

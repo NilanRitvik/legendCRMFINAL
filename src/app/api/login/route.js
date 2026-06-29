@@ -6,7 +6,7 @@ const ALL_PAGES = [
   'dashboard','clients','projects','payments','monthly-statements',
   'analytics','assets','team','amc','designing','purchase',
   'hr','hr-employees','hr-leaves','hr-attendance','hr-payroll',
-  'installation', 'manufacturing'
+  'installation', 'manufacturing', 'supervisor', 'supervisor-input'
 ];
 
 export async function POST(request) {

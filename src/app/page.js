@@ -753,7 +753,7 @@ export default function DashboardPage() {
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 title="Click to view accounts receivable breakup"
               >
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="metric-title" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>Accounts Receivable</span>
                     <span style={{ fontSize: '10px', backgroundColor: 'var(--warning-light)', color: 'var(--warning)', padding: '1px 5px', borderRadius: '3px' }}>🔍 Breakup</span>
@@ -761,7 +761,7 @@ export default function DashboardPage() {
                   <div className="metric-value" style={{ fontSize: '24px' }}>₹{(metrics?.globalAccountsReceivable ?? 0).toLocaleString()}</div>
                   <div className="metric-subtitle">Client funds currently owed to agency</div>
                 </div>
-                <span style={{ fontSize: '32px' }}>⏳</span>
+                <span style={{ fontSize: '32px', flexShrink: 0, marginLeft: '12px' }}>⏳</span>
               </div>
 
               <div 
@@ -772,7 +772,7 @@ export default function DashboardPage() {
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 title="Click to view accounts payable breakup"
               >
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="metric-title" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>Accounts Payable</span>
                     <span style={{ fontSize: '10px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', padding: '1px 5px', borderRadius: '3px' }}>🔍 Breakup</span>
@@ -780,7 +780,7 @@ export default function DashboardPage() {
                   <div className="metric-value" style={{ fontSize: '24px' }}>₹{(metrics?.globalAccountsPayable ?? 0).toLocaleString()}</div>
                   <div className="metric-subtitle">Outstanding unpaid vendor bills</div>
                 </div>
-                <span style={{ fontSize: '32px' }}>💸</span>
+                <span style={{ fontSize: '32px', flexShrink: 0, marginLeft: '12px' }}>💸</span>
               </div>
 
               <div 
@@ -791,7 +791,7 @@ export default function DashboardPage() {
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 title="Click to view AMC contracts breakup"
               >
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="metric-title" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>AMC Contracts</span>
                     <span style={{ fontSize: '10px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', padding: '1px 5px', borderRadius: '3px' }}>🔍 Breakup</span>
@@ -801,7 +801,7 @@ export default function DashboardPage() {
                     Value: ₹{(metrics?.totalAmcValue ?? 0).toLocaleString()} | Owed: ₹{(metrics?.totalAmcPending ?? 0).toLocaleString()}
                   </div>
                 </div>
-                <span style={{ fontSize: '32px' }}>🔄</span>
+                <span style={{ fontSize: '32px', flexShrink: 0, marginLeft: '12px' }}>🔄</span>
               </div>
 
               <div 
@@ -812,7 +812,7 @@ export default function DashboardPage() {
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 title="Click to view material stock valuation breakdown"
               >
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="metric-title" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>Stock Available</span>
                     <span style={{ fontSize: '10px', backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '1px 5px', borderRadius: '3px' }}>🔍 Breakup</span>
@@ -820,7 +820,7 @@ export default function DashboardPage() {
                   <div className="metric-value" style={{ fontSize: '24px' }}>₹{(metrics?.totalStockWorth ?? 0).toLocaleString()}</div>
                   <div className="metric-subtitle">Worth of stock in inventory (INR)</div>
                 </div>
-                <span style={{ fontSize: '32px' }}>🪵</span>
+                <span style={{ fontSize: '32px', flexShrink: 0, marginLeft: '12px' }}>🪵</span>
               </div>
             </div>
 

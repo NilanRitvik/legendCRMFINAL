@@ -25,6 +25,11 @@ export default function FinancialsPage() {
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showAddTransportModal, setShowAddTransportModal] = useState(false);
 
+  // List pagination / toggle view states (Recent 10 entries)
+  const [showAllLedger, setShowAllLedger] = useState(false);
+  const [showAllExpenses, setShowAllExpenses] = useState(false);
+  const [showAllTransport, setShowAllTransport] = useState(false);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -36,7 +41,7 @@ export default function FinancialsPage() {
         fetch('/api/projects'),
         fetch('/api/purchase'),
         fetch('/api/transport'),
-        fetch(`/api/hr/payroll?month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`)
+        fetch('/api/hr/payroll')
       ]);
 
       const payData = await resPay.json();
@@ -312,6 +317,18 @@ export default function FinancialsPage() {
       });
     });
 
+    // 5. Debits (Paid salaries/payroll)
+    payroll.filter(p => p.status === 'paid').forEach(p => {
+      entries.push({
+        date: new Date(p.payment_date || p.createdAt),
+        type: 'Salary Outflow',
+        description: `Salary paid to employee "${p.employee?.name || 'N/A'}" for ${p.month}/${p.year} (${p.payment_mode || 'bank_transfer'})`,
+        ref: p._id.substring(p._id.length - 6).toUpperCase(),
+        debit: p.net_salary,
+        credit: 0
+      });
+    });
+
     // Sort chronologically (oldest first) to compute running balance
     entries.sort((a, b) => a.date - b.date);
 
@@ -330,6 +347,25 @@ export default function FinancialsPage() {
 
   const ledgerBook = getLedgerEntries();
 
+  // 1. Total Outstanding Receivables (Unpaid or partially paid client invoices)
+  const totalReceivables = invoices
+    .filter(inv => inv.status !== 'paid')
+    .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+
+  // 2. Total Outstanding Payables (Unpaid vendor bills)
+  const totalPayables = payables
+    .filter(p => p.status !== 'paid')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  // 3. Consolidated Cash Balance (Revenue Inflows - Expenses - Purchases - Transport - Paid Payroll)
+  const totalInflows = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalExpensesOut = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalPurchasesOut = purchases.reduce((sum, p) => sum + (p.quantity * (p.rate || 0)), 0);
+  const totalTransportOut = transport.filter(t => t.payment_status === 'paid').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalPayrollOut = payroll.filter(p => p.status === 'paid').reduce((sum, p) => sum + (p.net_salary || 0), 0);
+  
+  const cashBalance = totalInflows - totalExpensesOut - totalPurchasesOut - totalTransportOut - totalPayrollOut;
+
   // Filters
   const filteredInvoices = invoices.filter(inv => {
     const q = searchQuery.toLowerCase();
@@ -346,7 +382,7 @@ export default function FinancialsPage() {
   });
 
   return (
-    <div>
+    <div style={{ maxWidth: '1600px', width: '100%', margin: '0 auto', padding: '0 10px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '4px' }}>💰 LegendIn Accounts & Ledger Console</h1>
@@ -358,24 +394,197 @@ export default function FinancialsPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="date-presets" style={{ width: 'fit-content', marginBottom: '28px' }}>
-        <button className={`preset-btn ${activeTab === 'receivables' ? 'active' : ''}`} onClick={() => setActiveTab('receivables')}>
-          ⏳ Accounts Receivable (Owed)
+      {/* Centralized Accounting Metrics Grid */}
+      <div className="grid-4" style={{ marginBottom: '24px' }}>
+        <div className="card-metric accent-success">
+          <div className="metric-title">Consolidated Cash Balance</div>
+          <div className="metric-value" style={{ color: cashBalance >= 0 ? '#10b981' : '#ef4444' }}>
+            ₹{cashBalance.toLocaleString('en-IN')}
+          </div>
+          <div className="metric-subtitle">Real-time General Ledger Cashflow</div>
+        </div>
+
+        <div className="card-metric accent-info">
+          <div className="metric-title">Accounts Receivable (Owed)</div>
+          <div className="metric-value">
+            ₹{totalReceivables.toLocaleString('en-IN')}
+          </div>
+          <div className="metric-subtitle">{invoices.filter(inv => inv.status !== 'paid').length} Outstanding Client Invoices</div>
+        </div>
+
+        <div className="card-metric accent-danger">
+          <div className="metric-title">Accounts Payable (Bills)</div>
+          <div className="metric-value">
+            ₹{totalPayables.toLocaleString('en-IN')}
+          </div>
+          <div className="metric-subtitle">{payables.filter(p => p.status !== 'paid').length} Unsettled Vendor Bills</div>
+        </div>
+
+        <div className="card-metric accent-warning">
+          <div className="metric-title">Total Operational Outflow</div>
+          <div className="metric-value">
+            ₹{(totalExpensesOut + totalPurchasesOut + totalTransportOut + totalPayrollOut).toLocaleString('en-IN')}
+          </div>
+          <div className="metric-subtitle">Expenses, Purchases, Logistics, Payroll</div>
+        </div>
+      </div>
+
+      {/* Premium Segmented Horizontal Tabs */}
+      <div className="no-print" style={{ 
+        display: 'flex', 
+        gap: '6px', 
+        marginBottom: '28px', 
+        background: '#f1f5f9', 
+        padding: '6px', 
+        borderRadius: '12px', 
+        width: '100%',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        border: '1px solid #e2e8f0',
+        boxShadow: 'inset 0 1.5px 3px rgba(0,0,0,0.05)'
+      }}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('receivables')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'receivables' ? '#fff' : 'transparent',
+            color: activeTab === 'receivables' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'receivables' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'receivables' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '150px'
+          }}
+        >
+          ⏳ Accounts Receivable
         </button>
-        <button className={`preset-btn ${activeTab === 'payables' ? 'active' : ''}`} onClick={() => setActiveTab('payables')}>
-          💸 Accounts Payable (Bills)
+        <button 
+          type="button"
+          onClick={() => setActiveTab('payables')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'payables' ? '#fff' : 'transparent',
+            color: activeTab === 'payables' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'payables' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'payables' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '150px'
+          }}
+        >
+          💸 Accounts Payable
         </button>
-        <button className={`preset-btn ${activeTab === 'gst_ledger' ? 'active' : ''}`} onClick={() => setActiveTab('gst_ledger')}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('gst_ledger')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'gst_ledger' ? '#fff' : 'transparent',
+            color: activeTab === 'gst_ledger' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'gst_ledger' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'gst_ledger' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '150px'
+          }}
+        >
           📋 Invoice GST Ledger
         </button>
-        <button className={`preset-btn ${activeTab === 'expenses' ? 'active' : ''}`} onClick={() => setActiveTab('expenses')}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('expenses')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'expenses' ? '#fff' : 'transparent',
+            color: activeTab === 'expenses' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'expenses' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'expenses' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '150px'
+          }}
+        >
           📉 Expenses Book
         </button>
-        <button className={`preset-btn ${activeTab === 'transport' ? 'active' : ''}`} onClick={() => setActiveTab('transport')}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('transport')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'transport' ? '#fff' : 'transparent',
+            color: activeTab === 'transport' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'transport' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'transport' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '150px'
+          }}
+        >
           🚚 Transport & Logistics
         </button>
-        <button className={`preset-btn ${activeTab === 'ledger_book' ? 'active' : ''}`} onClick={() => setActiveTab('ledger_book')}>
+        <button 
+          type="button"
+          onClick={() => setActiveTab('ledger_book')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            background: activeTab === 'ledger_book' ? '#fff' : 'transparent',
+            color: activeTab === 'ledger_book' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'ledger_book' ? '800' : '600',
+            fontSize: '13px',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'ledger_book' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            minWidth: '170px'
+          }}
+        >
           📖 Unified General Ledger
         </button>
       </div>
@@ -595,7 +804,7 @@ export default function FinancialsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map(e => (
+                    {(showAllExpenses ? expenses : expenses.slice(0, 10)).map(e => (
                       <tr key={e._id}>
                         <td>{new Date(e.expense_date).toLocaleDateString()}</td>
                         <td>
@@ -624,6 +833,17 @@ export default function FinancialsPage() {
                   </tbody>
                 </table>
               </div>
+              {expenses.length > 10 && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAllExpenses(!showAllExpenses)}
+                    style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                  >
+                    {showAllExpenses ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${expenses.length} Expenses`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -649,7 +869,7 @@ export default function FinancialsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transport.map(t => (
+                    {(showAllTransport ? transport : transport.slice(0, 10)).map(t => (
                       <tr key={t._id}>
                         <td style={{ fontWeight: '700' }}>
                           {t.transport_service}
@@ -684,6 +904,17 @@ export default function FinancialsPage() {
                   </tbody>
                 </table>
               </div>
+              {transport.length > 10 && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAllTransport(!showAllTransport)}
+                    style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                  >
+                    {showAllTransport ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${transport.length} Transport entries`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -705,7 +936,7 @@ export default function FinancialsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLedger.map((entry, idx) => (
+                    {(showAllLedger ? filteredLedger : filteredLedger.slice(0, 10)).map((entry, idx) => (
                       <tr key={idx}>
                         <td>{entry.date.toLocaleDateString()}</td>
                         <td>
@@ -734,6 +965,17 @@ export default function FinancialsPage() {
                   </tbody>
                 </table>
               </div>
+              {filteredLedger.length > 10 && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAllLedger(!showAllLedger)}
+                    style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                  >
+                    {showAllLedger ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${filteredLedger.length} Ledger entries`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

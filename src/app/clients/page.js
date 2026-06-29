@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { logActivity } from '@/lib/activityLogger';
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -82,6 +83,16 @@ export default function ClientsPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const created = await res.json();
+        // Log Activity
+        await logActivity({
+          action_type: 'create',
+          module: 'clients',
+          description: `Added new client: ${payload.name} from company ${payload.company}`,
+          ref_id: created._id || '',
+          ref_name: payload.name
+        });
+
         setNewClient({ name: '', company: '', email: '', phone: '', source: 'website', stage: 'lead', approx_value: '' });
         setIsClientModalOpen(false);
         fetchData();
@@ -103,6 +114,18 @@ export default function ClientsPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const clientObj = clients.find(c => c._id === clientId);
+        const nameStr = clientObj ? clientObj.name : 'Unknown Client';
+        
+        // Log Activity
+        await logActivity({
+          action_type: 'update',
+          module: 'clients',
+          description: `Updated client stage for ${nameStr} to "${newStage}"${reason ? ` (Reason: ${reason})` : ''}`,
+          ref_id: clientId,
+          ref_name: nameStr
+        });
+
         fetchData();
       }
     } catch (err) {
@@ -177,6 +200,16 @@ export default function ClientsPage() {
       });
 
       if (res.ok) {
+        const created = await res.json();
+        // Log Activity
+        await logActivity({
+          action_type: 'create',
+          module: 'clients',
+          description: `Generated quick quotation for client: ${lookupClient.company} (${lookupClient.name}) worth ₹${value.toLocaleString()}`,
+          ref_id: created._id || '',
+          ref_name: `Quote for ${lookupClient.company}`
+        });
+
         alert('Quotation generated successfully!');
         setQuickQuote({ quoted_value: '', scope_description: '', gst_rate: 18, has_gst: true });
         setLookupMode('menu');
@@ -209,6 +242,19 @@ export default function ClientsPage() {
       });
 
       if (res.ok) {
+        const created = await res.json();
+        const projObj = projects.find(p => p._id === quickInvoice.project);
+        const projName = projObj ? projObj.name : 'Unknown Project';
+
+        // Log Activity
+        await logActivity({
+          action_type: 'create',
+          module: 'invoices',
+          description: `Generated project invoice for ${projName} worth ₹${Number(quickInvoice.amount).toLocaleString()}`,
+          ref_id: created._id || '',
+          ref_name: `Invoice for ${projName}`
+        });
+
         alert('Invoice generated successfully!');
         setQuickInvoice({ project: '', amount: '', type: 'advance', issue_date: '', due_date: '' });
         setLookupMode('menu');

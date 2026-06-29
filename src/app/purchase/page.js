@@ -8,6 +8,7 @@ export default function PurchasePage() {
   const [tools, setTools] = useState([]);
   const [machines, setMachines] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [approvedDesigns, setApprovedDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -23,6 +24,12 @@ export default function PurchasePage() {
   const [toolsStatusFilter, setToolsStatusFilter] = useState('all');
   const [machinesSearch, setMachinesSearch] = useState('');
   const [machinesStatusFilter, setMachinesStatusFilter] = useState('all');
+
+  // List pagination / toggle view states (Recent 10 entries)
+  const [showAllStock, setShowAllStock] = useState(false);
+  const [showAllLedger, setShowAllLedger] = useState(false);
+  const [showAllTools, setShowAllTools] = useState(false);
+  const [showAllMachines, setShowAllMachines] = useState(false);
 
   // Modal / Form triggers
   const [activeForm, setActiveForm] = useState(null);
@@ -71,8 +78,11 @@ export default function PurchasePage() {
   const [selectedPendingReturn, setSelectedPendingReturn] = useState(null);
 
   const [wasteForm, setWasteForm] = useState({
-    material_name: '', quantity: '', notes: ''
+    material_name: '', quantity: '', project: '', notes: ''
   });
+  const [wasteItems, setWasteItems] = useState([{ material_name: '', quantity: '' }]);
+  const [wasteProject, setWasteProject] = useState('');
+  const [wasteNotes, setWasteNotes] = useState('');
 
   const [toolForm, setToolForm] = useState({
     name: '', make_brand: '', asset_id: '', status: 'available',
@@ -92,14 +102,19 @@ export default function PurchasePage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/purchase');
+      const [res, resDesigns] = await Promise.all([
+        fetch('/api/purchase'),
+        fetch('/api/designing')
+      ]);
       if (!res.ok) throw new Error('Failed to load inventory data');
       const data = await res.json();
+      const dataDesigns = await resDesigns.json();
       setMaterials(Array.isArray(data.materials) ? data.materials : []);
       setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
       setTools(Array.isArray(data.tools) ? data.tools : []);
       setMachines(Array.isArray(data.machines) ? data.machines : []);
       setProjects(Array.isArray(data.projects) ? data.projects : []);
+      setApprovedDesigns(Array.isArray(dataDesigns) ? dataDesigns : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -108,6 +123,30 @@ export default function PurchasePage() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  const getApprovedDesignsForClient = (clientId) => {
+    if (!clientId) return [];
+    return approvedDesigns.filter(d => 
+      d.approval_status === 'approved' &&
+      (d.client?._id === clientId || d.client === clientId)
+    );
+  };
+
+  const getDynamicQtyLabel = (unit) => {
+    switch (unit) {
+      case 'pcs': return 'pieces';
+      case 'mtr': return 'meters';
+      case 'kg': return 'kilograms';
+      case 'ltr': return 'litres';
+      case 'cm': return 'centimeters';
+      case 'inch': return 'inches';
+      case 'mm': return 'millimeters';
+      case 'rft': return 'running feet';
+      case 'sqt': return 'square feet';
+      case 'box': return 'boxes';
+      default: return 'qty';
+    }
+  };
 
   const handleFileUpload = async (e, field) => {
     const file = e.target.files[0];
@@ -171,7 +210,7 @@ export default function PurchasePage() {
         setOldStockForm({ material_name: '', material_brand: '', unit: 'pcs', quantity: '', rate: '', purchase_date: '', notes: '' });
         setIssueForm({ material_name: '', quantity: '', project: '', notes: '' });
         setReturnForm({ material_name: '', quantity: '', project: '', notes: '' });
-        setWasteForm({ material_name: '', quantity: '', notes: '' });
+        setWasteForm({ material_name: '', quantity: '', project: '', notes: '' });
         setToolForm({
           name: '', make_brand: '', asset_id: '', status: 'available',
           handler_name: '', handler_contact: '', handler_supervisor: '',
@@ -252,6 +291,38 @@ export default function PurchasePage() {
       }
     } catch (err) {
       console.error(err);
+      alert('Error connecting to server.');
+    }
+  };
+
+  const handleBatchWasteSubmit = async (e) => {
+    e.preventDefault();
+    const validItems = wasteItems.filter(item => item.material_name && Number(item.quantity) > 0);
+    if (validItems.length === 0) return alert('Please select at least one material with a valid quantity to write off');
+
+    try {
+      const res = await fetch('/api/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_waste',
+          items: validItems,
+          project: wasteProject || 'general',
+          notes: wasteNotes
+        })
+      });
+      if (res.ok) {
+        setActiveForm(null);
+        setWasteItems([{ material_name: '', quantity: '' }]);
+        setWasteProject('');
+        setWasteNotes('');
+        alert('Batch waste write-off request sent successfully! Pending CEO approval.');
+        loadData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to complete batch waste write-off');
+      }
+    } catch {
       alert('Error connecting to server.');
     }
   };
@@ -585,6 +656,33 @@ export default function PurchasePage() {
       setReturnItems(currentItems.map(i => i.material_name === materialName ? { ...i, quantity: qty } : i));
     } else {
       setReturnItems([...currentItems, { material_name: materialName, quantity: qty }]);
+    }
+  };
+
+  const handleToggleWasteMaterial = (materialName) => {
+    let currentItems = [...wasteItems];
+    if (currentItems.length === 1 && currentItems[0].material_name === '') {
+      currentItems = [];
+    }
+    const exists = currentItems.some(i => i.material_name === materialName);
+    if (exists) {
+      const filtered = currentItems.filter(i => i.material_name !== materialName);
+      setWasteItems(filtered.length === 0 ? [{ material_name: '', quantity: '' }] : filtered);
+    } else {
+      setWasteItems([...currentItems, { material_name: materialName, quantity: '1' }]);
+    }
+  };
+
+  const handleUpdateWasteQuantity = (materialName, qty) => {
+    let currentItems = [...wasteItems];
+    if (currentItems.length === 1 && currentItems[0].material_name === '') {
+      currentItems = [];
+    }
+    const exists = currentItems.some(i => i.material_name === materialName);
+    if (exists) {
+      setWasteItems(currentItems.map(i => i.material_name === materialName ? { ...i, quantity: qty } : i));
+    } else {
+      setWasteItems([...currentItems, { material_name: materialName, quantity: qty }]);
     }
   };
 
@@ -998,7 +1096,7 @@ export default function PurchasePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStocks.map((m, i) => {
+                  {(showAllStock ? filteredStocks : filteredStocks.slice(0, 10)).map((m, i) => {
                     const stockVal = (m.current_stock || 0) * (m.last_rate || 0);
                     const statusBg = m.current_stock <= 0 ? '#fef2f2' : m.current_stock <= 5 ? '#fff7ed' : '#ecfdf5';
                     const statusColor = m.current_stock <= 0 ? '#dc2626' : m.current_stock <= 5 ? '#c2410c' : '#059669';
@@ -1048,6 +1146,17 @@ export default function PurchasePage() {
                 </tbody>
               </table>
             </div>
+            {filteredStocks.length > 10 && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAllStock(!showAllStock)}
+                  style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                >
+                  {showAllStock ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${filteredStocks.length} Materials`}
+                </button>
+              </div>
+            )}
             <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
               Showing {filteredStocks.length} of {materials.length} materials
             </div>
@@ -1099,7 +1208,7 @@ export default function PurchasePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLedger.map(t => {
+                  {(showAllLedger ? filteredLedger : filteredLedger.slice(0, 10)).map(t => {
                     const isOut = t.transaction_type === 'issue' || t.transaction_type === 'waste';
                     return (
                       <tr key={t._id}>
@@ -1137,6 +1246,17 @@ export default function PurchasePage() {
                 </tbody>
               </table>
             </div>
+            {filteredLedger.length > 10 && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAllLedger(!showAllLedger)}
+                  style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                >
+                  {showAllLedger ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${filteredLedger.length} Ledger entries`}
+                </button>
+              </div>
+            )}
             <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
               Showing {filteredLedger.length} of {transactions.length} entries
             </div>
@@ -1172,7 +1292,7 @@ export default function PurchasePage() {
 
             <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '8px', marginBottom: '10px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-              {filteredTools.map(tool => (
+              {(showAllTools ? filteredTools : filteredTools.slice(0, 10)).map(tool => (
                 <div key={tool._id} style={{
                   background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                   borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px',
@@ -1237,6 +1357,17 @@ export default function PurchasePage() {
               )}
               </div>
             </div>
+            {filteredTools.length > 10 && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAllTools(!showAllTools)}
+                  style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                >
+                  {showAllTools ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${filteredTools.length} Tools`}
+                </button>
+              </div>
+            )}
             <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
               Showing {filteredTools.length} of {tools.length} tools
             </div>
@@ -1272,7 +1403,7 @@ export default function PurchasePage() {
 
             <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '8px', marginBottom: '10px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {filteredMachines.map(m => {
+              {(showAllMachines ? filteredMachines : filteredMachines.slice(0, 10)).map(m => {
                 const serviceDue = m.next_service_due ? new Date(m.next_service_due) : null;
                 const isDueOverdue = serviceDue && serviceDue < new Date();
                 return (
@@ -1340,6 +1471,17 @@ export default function PurchasePage() {
               )}
               </div>
             </div>
+            {filteredMachines.length > 10 && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAllMachines(!showAllMachines)}
+                  style={{ fontSize: '12px', padding: '6px 16px', fontWeight: '700' }}
+                >
+                  {showAllMachines ? '⬆️ Hide/View Recent 10 Only' : `⬇️ View All ${filteredMachines.length} Machines`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1460,8 +1602,8 @@ export default function PurchasePage() {
 
                       {/* Quantity */}
                       <div style={{ flex: 0.9 }}>
-                        <label style={{ fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Qty *</label>
-                        <input type="number" className="form-control" required placeholder="10" value={item.quantity}
+                        <label style={{ fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Qty ({getDynamicQtyLabel(item.unit)}) *</label>
+                        <input type="number" step="any" className="form-control" required placeholder={`How many ${getDynamicQtyLabel(item.unit)}?`} value={item.quantity}
                           onChange={e => updatePurchaseItem(idx, 'quantity', e.target.value)} style={{ padding: '6px 8px', fontSize: '12.5px' }} />
                       </div>
 
@@ -1471,15 +1613,14 @@ export default function PurchasePage() {
                         <select className="form-control" required value={item.unit}
                           onChange={e => updatePurchaseItem(idx, 'unit', e.target.value)} style={{ padding: '6px 8px', fontSize: '12.5px', height: '31px' }}>
                           <option value="pcs">pcs (Pieces)</option>
+                          <option value="mtr">mtr (Meters)</option>
                           <option value="kg">kg (Kilograms)</option>
-                          <option value="litre">litre (Litres)</option>
-                          <option value="meter">meter (Meters)</option>
+                          <option value="ltr">ltr (Litres)</option>
                           <option value="cm">cm (Centimeters)</option>
                           <option value="inch">inch (Inches)</option>
                           <option value="mm">mm (Millimeters)</option>
                           <option value="rft">rft (Running Feet)</option>
-                          <option value="cft">cft (Cubic Feet)</option>
-                          <option value="sqft">sqft (Square Feet)</option>
+                          <option value="sqt">sqt (Square Feet)</option>
                           <option value="box">box (Boxes)</option>
                         </select>
                       </div>
@@ -1660,23 +1801,22 @@ export default function PurchasePage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group">
-                <label>Quantity Available</label>
-                <input type="number" className="form-control" required placeholder="20"
+                <label>Quantity Available ({getDynamicQtyLabel(oldStockForm.unit)})</label>
+                <input type="number" step="any" className="form-control" required placeholder={`How many ${getDynamicQtyLabel(oldStockForm.unit)}?`}
                   value={oldStockForm.quantity} onChange={e => setOldStockForm({ ...oldStockForm, quantity: e.target.value })} />
               </div>
               <div className="form-group">
                 <label>Unit</label>
                 <select className="form-control" required value={oldStockForm.unit} onChange={e => setOldStockForm({ ...oldStockForm, unit: e.target.value })}>
                   <option value="pcs">pcs (Pieces)</option>
+                  <option value="mtr">mtr (Meters)</option>
                   <option value="kg">kg (Kilograms)</option>
-                  <option value="litre">litre (Litres)</option>
-                  <option value="meter">meter (Meters)</option>
+                  <option value="ltr">ltr (Litres)</option>
                   <option value="cm">cm (Centimeters)</option>
                   <option value="inch">inch (Inches)</option>
                   <option value="mm">mm (Millimeters)</option>
                   <option value="rft">rft (Running Feet)</option>
-                  <option value="cft">cft (Cubic Feet)</option>
-                  <option value="sqft">sqft (Square Feet)</option>
+                  <option value="sqt">sqt (Square Feet)</option>
                   <option value="box">box (Boxes)</option>
                 </select>
               </div>
@@ -1714,7 +1854,7 @@ export default function PurchasePage() {
       {/* 3. Multi-Item Issue Stock Modal */}
       {activeForm === 'issue' && (
         <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-          <div className="modal-content-wide">
+          <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', padding: '24px' }}>
             <div className="modal-header">
               <h3 className="modal-title">📤 Issue Stock to Project (Multi-Item)</h3>
               <button 
@@ -1750,7 +1890,7 @@ export default function PurchasePage() {
 
                 {/* Materials List with checkboxes and qty inputs */}
                 <div style={{ 
-                  maxHeight: '320px', 
+                  maxHeight: '500px', 
                   overflowY: 'auto', 
                   display: 'flex', 
                   flexDirection: 'column', 
@@ -1799,16 +1939,18 @@ export default function PurchasePage() {
 
                           {isChecked && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qty:</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qty ({getDynamicQtyLabel(m.unit)}):</span>
                               <input 
                                 type="number" 
+                                step="any"
                                 className="form-control" 
                                 required 
-                                min="1"
+                                min="0.001"
                                 max={m.current_stock}
                                 value={currentQty} 
+                                placeholder={getDynamicQtyLabel(m.unit)}
                                 onChange={e => handleUpdateIssueQuantity(m.name, e.target.value)}
-                                style={{ width: '70px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
+                                style={{ width: '90px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
                               />
                             </div>
                           )}
@@ -1847,6 +1989,44 @@ export default function PurchasePage() {
                     ))}
                   </select>
                 </div>
+
+                {issueProject && (() => {
+                  const selectedProjObj = projects.find(p => p._id === issueProject);
+                  const clientId = selectedProjObj?.client?._id || selectedProjObj?.client;
+                  const projectDesigns = getApprovedDesignsForClient(clientId);
+                  if (projectDesigns.length === 0) {
+                    return (
+                      <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '11px', color: '#dc2626', fontWeight: '500' }}>
+                        ⚠️ No approved 2D/3D design plans found for this client. Please upload/approve designs in the 2D & 3D panel first.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        📐 Linked Approved Designs & Plans
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {projectDesigns.map(d => (
+                          <div key={d._id} style={{ background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                            <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                              <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={d.file_name}>
+                                {d.file_name}
+                              </strong>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                {d.design_type === '2d' ? '📐 2D Layout Plan' : '🕶️ 3D Perspective'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>👁️ View</a>
+                              <a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>📥 Down</a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="form-group">
                   <label style={{ fontSize: '11px', fontWeight: '800' }}>Allocation Notes</label>
@@ -1914,7 +2094,7 @@ export default function PurchasePage() {
       {/* 4. Multi-Item Return Stock Modal */}
       {activeForm === 'return' && (
         <div className="modal-backdrop" style={{ zIndex: 1200 }}>
-          <div className="modal-content-wide">
+          <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', padding: '24px' }}>
             {/* Modal Header */}
             <div className="modal-header" style={{ paddingBottom: '10px', borderBottom: 'none' }}>
               <h3 className="modal-title">↩️ Project Return & Verification Portal</h3>
@@ -2008,7 +2188,7 @@ export default function PurchasePage() {
 
                   {/* Scrollable list */}
                   <div style={{ 
-                    maxHeight: '300px', 
+                    maxHeight: '500px', 
                     overflowY: 'auto', 
                     display: 'flex', 
                     flexDirection: 'column', 
@@ -2055,15 +2235,17 @@ export default function PurchasePage() {
 
                             {isChecked && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qty:</span>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qty ({getDynamicQtyLabel(m.unit)}):</span>
                                 <input 
                                   type="number" 
+                                  step="any"
                                   className="form-control" 
                                   required 
-                                  min="1"
+                                  min="0.001"
                                   value={currentQty} 
+                                  placeholder={getDynamicQtyLabel(m.unit)}
                                   onChange={e => handleUpdateReturnQuantity(m.name, e.target.value)}
-                                  style={{ width: '70px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
+                                  style={{ width: '90px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
                                 />
                               </div>
                             )}
@@ -2097,6 +2279,44 @@ export default function PurchasePage() {
                       ))}
                     </select>
                   </div>
+
+                  {returnProject && (() => {
+                    const selectedProjObj = projects.find(p => p._id === returnProject);
+                    const clientId = selectedProjObj?.client?._id || selectedProjObj?.client;
+                    const projectDesigns = getApprovedDesignsForClient(clientId);
+                    if (projectDesigns.length === 0) {
+                      return (
+                        <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', fontSize: '11px', color: '#dc2626', fontWeight: '500' }}>
+                          ⚠️ No approved 2D/3D design plans found for this client. Please upload/approve designs in the 2D & 3D panel first.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          📐 Linked Approved Designs & Plans
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {projectDesigns.map(d => (
+                            <div key={d._id} style={{ background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                              <div style={{ minWidth: 0, flex: 1, paddingRight: '10px' }}>
+                                <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }} title={d.file_name}>
+                                  {d.file_name}
+                                </strong>
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                  {d.design_type === '2d' ? '📐 2D Layout Plan' : '🕶️ 3D Perspective'}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <a href={d.file_url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>👁️ View</a>
+                                <a href={d.file_url} download={d.file_name} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: '10px', textDecoration: 'none' }}>📥 Down</a>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="form-group">
                     <label style={{ fontSize: '11px', fontWeight: '800' }}>Return Notes (Reason & Condition)</label>
@@ -2359,40 +2579,237 @@ export default function PurchasePage() {
         </div>
       )}
       
-      {/* 5. Waste Write-off Modal */}
+      {/* 5. Multi-Item Waste Write-off Modal */}
       {activeForm === 'waste' && (
-        <div className="modal-backdrop">
-          <form className="modal-content" onSubmit={(e) => { e.preventDefault(); handleAction('add_waste', wasteForm); }}>
+        <div className="modal-backdrop" style={{ zIndex: 1200 }}>
+          <div className="modal-content" style={{ maxWidth: '1000px', width: '95%', padding: '24px' }}>
             <div className="modal-header">
-              <h3 className="modal-title" style={{ color: 'var(--danger)' }}>🗑️ Write-off Waste Material</h3>
-              <button type="button" className="modal-close" onClick={() => setActiveForm(null)}>×</button>
+              <h3 className="modal-title" style={{ color: 'var(--danger)' }}>🗑️ Write-off Waste Material (Multi-Item)</h3>
+              <button 
+                type="button" 
+                className="modal-close" 
+                onClick={() => { setActiveForm(null); setModalMaterialSearch(''); }}
+              >
+                ×
+              </button>
             </div>
 
-            <div className="form-group">
-              <label>Select Material</label>
-              <select className="form-control" required value={wasteForm.material_name} onChange={e => setWasteForm({ ...wasteForm, material_name: e.target.value })}>
-                <option value="">-- Select Material --</option>
-                {materials.map(m => <option key={m._id} value={m.name}>{m.name} (Stock: {m.current_stock})</option>)}
-              </select>
-            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '24px', marginTop: '8px' }}>
+              {/* Left Column: Search & Select Materials */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Select Materials to Write off
+                  </h4>
+                  <span style={{ fontSize: '11px', color: 'var(--danger)', fontWeight: 'bold' }}>
+                    {wasteItems.filter(item => item.material_name && Number(item.quantity) > 0).length} items selected
+                  </span>
+                </div>
 
-            <div className="form-group">
-              <label>Wastage Quantity</label>
-              <input type="number" className="form-control" required placeholder="1"
-                value={wasteForm.quantity} onChange={e => setWasteForm({ ...wasteForm, quantity: e.target.value })} />
-            </div>
+                {/* Local Material Search Bar */}
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="🔍 Search materials to write off..." 
+                  value={modalMaterialSearch}
+                  onChange={e => setModalMaterialSearch(e.target.value)}
+                  style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+                />
 
-            <div className="form-group">
-              <label>Reason / Notes</label>
-              <textarea className="form-control" required rows="2" placeholder="E.g. Broken during transport, off-cuts scrap"
-                value={wasteForm.notes} onChange={e => setWasteForm({ ...wasteForm, notes: e.target.value })} />
-            </div>
+                {/* Materials List with checkboxes and qty inputs */}
+                <div style={{ 
+                  maxHeight: '480px', 
+                  overflowY: 'auto', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '8px', 
+                  paddingRight: '6px',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  backgroundColor: '#fafafa'
+                }}>
+                  {materials
+                    .filter(m => m.current_stock > 0 && (modalMaterialSearch === '' || m.name.toLowerCase().includes(modalMaterialSearch.toLowerCase())))
+                    .map(m => {
+                      const selectedItem = wasteItems.find(i => i.material_name === m.name);
+                      const isChecked = !!selectedItem;
+                      const currentQty = selectedItem ? selectedItem.quantity : '';
 
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setActiveForm(null)}>Cancel</button>
-              <button type="submit" className="btn btn-danger">Record Waste</button>
+                      return (
+                        <div 
+                          key={m._id} 
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            padding: '8px 10px',
+                            background: isChecked ? 'rgba(220,38,38,0.05)' : '#ffffff',
+                            border: isChecked ? '1.5px solid rgba(220,38,38,0.2)' : '1px solid #e8ebf0',
+                            borderRadius: '8px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1, margin: 0 }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={() => handleToggleWasteMaterial(m.name)}
+                              style={{ width: '15px', height: '15px', cursor: 'pointer' }}
+                            />
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>{m.name}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Stock: {m.current_stock} {m.unit} · Rate: ₹{(m.last_rate || 0).toLocaleString()}</div>
+                            </div>
+                          </label>
+
+                          {isChecked && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Qty ({getDynamicQtyLabel(m.unit)}):</span>
+                              <input 
+                                type="number" 
+                                step="any"
+                                className="form-control" 
+                                required 
+                                min="0.001"
+                                max={m.current_stock}
+                                value={currentQty} 
+                                placeholder={getDynamicQtyLabel(m.unit)}
+                                onChange={e => handleUpdateWasteQuantity(m.name, e.target.value)}
+                                style={{ width: '90px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px' }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {materials.filter(m => m.current_stock > 0 && (modalMaterialSearch === '' || m.name.toLowerCase().includes(modalMaterialSearch.toLowerCase()))).length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-light)', fontSize: '12px' }}>
+                      No available materials match search.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Destination Details & Save */}
+              <form 
+                onSubmit={handleBatchWasteSubmit} 
+                style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '1px solid #e2e8f0', paddingLeft: '24px' }}
+              >
+                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Wastage Details
+                </h4>
+
+                <div className="form-group">
+                  <label style={{ fontSize: '11px', fontWeight: '800' }}>Allocate Wastage to Project</label>
+                  <select 
+                    className="form-control" 
+                    value={wasteProject} 
+                    onChange={e => setWasteProject(e.target.value)}
+                    style={{ padding: '8px 12px', fontSize: '13px' }}
+                  >
+                    <option value="">-- General Waste (No Specific Project) --</option>
+                    {projects.map(p => (
+                      <option key={p._id} value={p._id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ fontSize: '11px', fontWeight: '800' }}>Reason / Notes</label>
+                  <textarea 
+                    className="form-control" 
+                    required
+                    rows="3" 
+                    placeholder="Enter reason for wastage (E.g. Damaged during cut assembly, board defects)..."
+                    value={wasteNotes} 
+                    onChange={e => setWasteNotes(e.target.value)}
+                    style={{ fontSize: '13px' }}
+                  />
+                </div>
+
+                {/* Summary list with calculated values */}
+                {(() => {
+                  let totalWastageValue = 0;
+                  const itemSummaries = wasteItems
+                    .filter(i => i.material_name && Number(i.quantity) > 0)
+                    .map((item) => {
+                      const mat = materials.find(m => m.name === item.material_name);
+                      const unitRate = mat ? (mat.last_rate || 0) : 0;
+                      const itemVal = unitRate * Number(item.quantity);
+                      totalWastageValue += itemVal;
+                      return {
+                        name: item.material_name,
+                        qty: item.quantity,
+                        unit: mat ? mat.unit : 'pcs',
+                        value: itemVal
+                      };
+                    });
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1 }}>
+                      <div style={{ 
+                        background: 'rgba(220,38,38,0.02)', 
+                        padding: '12px', 
+                        borderRadius: '8px', 
+                        border: '1px solid rgba(220,38,38,0.1)', 
+                        fontSize: '12px', 
+                        maxHeight: '150px', 
+                        overflowY: 'auto' 
+                      }}>
+                        <strong style={{ display: 'block', color: 'var(--text-main)', marginBottom: '6px' }}>Wasted Items:</strong>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {itemSummaries.map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+                              <span>• {item.name} ({item.qty} {item.unit})</span>
+                              <strong>₹{item.value.toLocaleString()}</strong>
+                            </div>
+                          ))}
+                          {itemSummaries.length === 0 && (
+                            <div style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '11px' }}>
+                              No items selected. Use the list on the left to add items.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {itemSummaries.length > 0 && (
+                        <div style={{
+                          background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: '8px',
+                          padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                        }}>
+                          <span style={{ fontSize: '12px', color: 'var(--danger)', fontWeight: 'bold' }}>Total Wastage Value:</span>
+                          <strong style={{ fontSize: '15px', color: 'var(--danger)' }}>₹{totalWastageValue.toLocaleString()}</strong>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: 'auto', paddingTop: '10px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => { setActiveForm(null); setModalMaterialSearch(''); }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn"
+                    disabled={wasteItems.filter(i => i.material_name && Number(i.quantity) > 0).length === 0}
+                    style={{
+                      backgroundColor: 'var(--danger)', color: '#fff', border: 'none',
+                      borderRadius: 'var(--border-radius-sm)', padding: '10px 20px', fontWeight: '800',
+                      fontSize: '13px', cursor: 'pointer', opacity: wasteItems.filter(i => i.material_name && Number(i.quantity) > 0).length === 0 ? 0.6 : 1
+                    }}
+                  >
+                    Record Waste
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         </div>
       )}
 

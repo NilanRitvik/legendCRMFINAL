@@ -36,7 +36,7 @@ export function proxy(request) {
 
       if (sessionData && Array.isArray(sessionData.allowedPages)) {
         const allowed = sessionData.role === 'admin'
-          ? ['ceo','dashboard','clients','projects','payments','monthly-statements','analytics','assets','team','amc','designing','purchase','hr','hr-employees','hr-leaves','hr-attendance','hr-payroll','installation', 'manufacturing']
+          ? ['ceo','dashboard','clients','projects','payments','monthly-statements','analytics','assets','team','amc','designing','purchase','hr','hr-employees','hr-leaves','hr-attendance','hr-payroll','installation', 'manufacturing', 'supervisor', 'supervisor-input']
           : sessionData.allowedPages;
         
         let pageKey = null;
@@ -52,6 +52,8 @@ export function proxy(request) {
         else if (pathname.startsWith('/amc')) pageKey = 'amc';
         else if (pathname.startsWith('/designing')) pageKey = 'designing';
         else if (pathname.startsWith('/purchase')) pageKey = 'purchase';
+        else if (pathname.startsWith('/supervisor')) pageKey = 'supervisor';
+        else if (pathname.startsWith('/hr/supervisor-input')) pageKey = 'supervisor-input';
         else if (pathname.startsWith('/hr')) pageKey = 'hr';
         else if (pathname.startsWith('/installation')) pageKey = 'installation';
         else if (pathname.startsWith('/manufacturing')) pageKey = 'manufacturing';

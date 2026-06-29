@@ -1,5 +1,6 @@
 import dbConnect from '@/lib/dbConnect';
 import { MaterialStock, MaterialTransaction, ToolAsset, Machine, Project } from '@/lib/models';
+import { logActivity } from '@/lib/activityLogger';
 
 export async function GET(request) {
   try {
@@ -35,6 +36,21 @@ export async function POST(request) {
     if (!action) {
       return Response.json({ error: 'Action parameter is required' }, { status: 400 });
     }
+
+    // Parse user details from session cookie
+    let username = 'System';
+    let user_role = 'admin';
+    try {
+      const cookieHeader = request.headers.get('cookie') || '';
+      const sessionCookie = cookieHeader.split('; ').find(row => row.startsWith('legendin_session='));
+      if (sessionCookie) {
+        const val = sessionCookie.split('=')[1];
+        const decoded = Buffer.from(val, 'base64').toString('utf-8');
+        const data = JSON.parse(decoded);
+        username = data.username || 'System';
+        user_role = data.role || 'admin';
+      }
+    } catch (e) {}
 
     if (action === 'add_purchase') {
       const { material_name, material_brand, rate, quantity, supplier, invoice_number, unit, date, notes, damaged_quantity, gst_percentage, transport_charges } = body;
@@ -329,7 +345,7 @@ export async function POST(request) {
 
 
     if (action === 'add_waste') {
-      const { material_name, quantity, date, notes } = body;
+      const { material_name, quantity, project, date, notes } = body;
       if (!material_name || !quantity) {
         return Response.json({ error: 'Material name and quantity are required' }, { status: 400 });
       }
@@ -340,16 +356,86 @@ export async function POST(request) {
         return Response.json({ error: `Insufficient stock. Available: ${stock ? stock.current_stock : 0}` }, { status: 400 });
       }
 
+      const unitRate = stock.last_rate || 0;
+      const targetProject = project && project !== 'general' ? project : null;
+
       const transaction = await MaterialTransaction.create({
         transaction_type: 'waste',
         material_name: cleanName,
         quantity: Number(quantity),
+        rate: unitRate,
+        unit: stock.unit || 'pcs',
+        project: targetProject,
         date: date || new Date(),
         notes,
         approval_status: 'pending'
       });
 
+      // Log action activity
+      await logActivity({
+        username,
+        user_role,
+        action_type: 'create',
+        module: 'purchase',
+        description: `Logged waste write-off: ${quantity} ${stock.unit || 'pcs'} of ${cleanName} (Est. value: ₹${(unitRate * Number(quantity)).toLocaleString()})`,
+        ref_id: transaction._id.toString(),
+        ref_name: cleanName
+      });
+
       return Response.json({ transaction }, { status: 201 });
+    }
+
+    if (action === 'batch_waste') {
+      const { items, project, date, notes } = body;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return Response.json({ error: 'Items array is required' }, { status: 400 });
+      }
+
+      const batch_id = 'batch-waste-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+      const targetProject = project && project !== 'general' ? project : null;
+
+      const transactions = [];
+      for (const item of items) {
+        const cleanName = item.material_name.trim();
+        const qty = Number(item.quantity);
+        if (!cleanName || isNaN(qty) || qty <= 0) {
+          return Response.json({ error: `Invalid item details: ${JSON.stringify(item)}` }, { status: 400 });
+        }
+
+        let stock = await MaterialStock.findOne({ name: { $regex: new RegExp(`^${cleanName}$`, 'i') } });
+        if (!stock || stock.current_stock < qty) {
+          return Response.json({ error: `Insufficient stock for ${cleanName}. Available: ${stock ? stock.current_stock : 0}, requested: ${qty}` }, { status: 400 });
+        }
+
+        const unitRate = stock.last_rate || 0;
+
+        const transaction = await MaterialTransaction.create({
+          transaction_type: 'waste',
+          material_name: cleanName,
+          quantity: qty,
+          rate: unitRate,
+          unit: stock.unit || 'pcs',
+          project: targetProject,
+          date: date || new Date(),
+          notes: notes || '',
+          approval_status: 'pending',
+          batch_id
+        });
+        transactions.push(transaction);
+      }
+
+      // Log action activity
+      await logActivity({
+        username,
+        user_role,
+        action_type: 'create',
+        module: 'purchase',
+        description: `Logged batch waste write-off of ${items.length} items (Batch ID: ${batch_id})`,
+        ref_id: batch_id,
+        ref_name: batch_id
+      });
+
+      return Response.json({ success: true, batch_id, transactions }, { status: 201 });
     }
 
     // ─── TOOLS ACTIONS ───
@@ -501,6 +587,41 @@ export async function POST(request) {
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(request) {
+  try {
+    await dbConnect();
+    const body = await request.json();
+    const { id, action, quantity, rate, gst_percentage, transport_charges, accounts_approved } = body;
+
+    if (!id) {
+      return Response.json({ error: 'Transaction ID is required' }, { status: 400 });
+    }
+
+    const txn = await MaterialTransaction.findById(id);
+    if (!txn) {
+      return Response.json({ error: 'Material transaction not found' }, { status: 404 });
+    }
+
+    if (action === 'update_project_material') {
+      if (quantity !== undefined) txn.quantity = Number(quantity);
+      if (rate !== undefined) txn.rate = Number(rate);
+      if (gst_percentage !== undefined) txn.gst_percentage = Number(gst_percentage);
+      if (transport_charges !== undefined) txn.transport_charges = Number(transport_charges);
+      if (accounts_approved !== undefined) {
+        txn.accounts_approved = Boolean(accounts_approved);
+        txn.accounts_approved_date = Boolean(accounts_approved) ? new Date() : null;
+      }
+      
+      await txn.save();
+      return Response.json({ success: true, transaction: txn });
+    }
+
+    return Response.json({ error: 'Invalid action specified' }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

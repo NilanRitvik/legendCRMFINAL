@@ -213,7 +213,8 @@ const TeamSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'manager', 'viewer'], default: 'viewer' },
+  role: { type: String, enum: ['admin', 'manager', 'viewer', 'supervisor'], default: 'viewer' },
+  employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
   allowedPages: [{ type: String }]
 }, { timestamps: true });
 
@@ -233,7 +234,11 @@ if (mongoose.models.Team) {
   delete mongoose.models.Team;
 }
 export const Team = createModelProxy('Team', mongoose.model('Team', TeamSchema));
-export const User = createModelProxy('User', mongoose.models.User || mongoose.model('User', UserSchema));
+
+if (mongoose.models.User) {
+  delete mongoose.models.User;
+}
+export const User = createModelProxy('User', mongoose.model('User', UserSchema));
 
 
 // ─── HR MODULE SCHEMAS ────────────────────────────────────────────────────────
@@ -241,6 +246,7 @@ export const User = createModelProxy('User', mongoose.models.User || mongoose.mo
 // 12. Employee / Freelancer Schema
 const EmployeeSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  employee_code: { type: String, unique: true },
   designation: { type: String, required: true },
   department: { type: String, default: '' },
   type: { type: String, enum: ['employee', 'freelancer', 'consultant'], default: 'employee' },
@@ -373,7 +379,9 @@ const DesignSchema = new mongoose.Schema({
   notes: String,
   uploaded_at: { type: Date, default: Date.now },
   approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  approval_notes: { type: String, default: '' }
+  approval_notes: { type: String, default: '' },
+  acceptance_file_name: { type: String },
+  acceptance_file_url: { type: String }
 }, { timestamps: true });
 
 // 17. Material Stock Schema
@@ -408,7 +416,9 @@ const MaterialTransactionSchema = new mongoose.Schema({
   replacement_received_quantity: { type: Number, default: 0 },
   unit: { type: String, default: 'pcs' },
   gst_percentage: { type: Number, default: 0 },
-  transport_charges: { type: Number, default: 0 }
+  transport_charges: { type: Number, default: 0 },
+  accounts_approved: { type: Boolean, default: false },
+  accounts_approved_date: { type: Date, default: null }
 }, { timestamps: true });
 
 // 19. Tool Asset Schema
@@ -461,7 +471,10 @@ const TransportLogisticsSchema = new mongoose.Schema({
 
 export const Design = createModelProxy('Design', mongoose.models.Design || mongoose.model('Design', DesignSchema));
 export const MaterialStock = createModelProxy('MaterialStock', mongoose.models.MaterialStock || mongoose.model('MaterialStock', MaterialStockSchema));
-export const MaterialTransaction = createModelProxy('MaterialTransaction', mongoose.models.MaterialTransaction || mongoose.model('MaterialTransaction', MaterialTransactionSchema));
+if (mongoose.models.MaterialTransaction) {
+  delete mongoose.models.MaterialTransaction;
+}
+export const MaterialTransaction = createModelProxy('MaterialTransaction', mongoose.model('MaterialTransaction', MaterialTransactionSchema));
 export const ToolAsset = createModelProxy('ToolAsset', mongoose.models.ToolAsset || mongoose.model('ToolAsset', ToolAssetSchema));
 export const Machine = createModelProxy('Machine', mongoose.models.Machine || mongoose.model('Machine', MachineSchema));
 export const TransportLogistics = createModelProxy('TransportLogistics', mongoose.models.TransportLogistics || mongoose.model('TransportLogistics', TransportLogisticsSchema));
@@ -479,10 +492,18 @@ const InstallationSchema = new mongoose.Schema({
   status: { type: String, enum: ['scheduled', 'in_progress', 'completed'], default: 'scheduled' },
   notes: String,
   approval_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  approval_notes: { type: String, default: '' }
+  approval_notes: { type: String, default: '' },
+  documents: [{
+    file_name: { type: String },
+    file_url: { type: String },
+    uploaded_at: { type: Date, default: Date.now }
+  }]
 }, { timestamps: true });
 
-export const Installation = createModelProxy('Installation', mongoose.models.Installation || mongoose.model('Installation', InstallationSchema));
+if (mongoose.models.Installation) {
+  delete mongoose.models.Installation;
+}
+export const Installation = createModelProxy('Installation', mongoose.model('Installation', InstallationSchema));
 
 // 23. Manufacturing Schema
 const ManufacturingSchema = new mongoose.Schema({
@@ -599,7 +620,32 @@ if (mongoose.models.SupervisorNotification) {
 }
 export const SupervisorNotification = createModelProxy('SupervisorNotification', mongoose.model('SupervisorNotification', SupervisorNotificationSchema));
 
+// 30. Activity Log Schema — tracks every user action for weekly reports & Nuera analysis
+const ActivityLogSchema = new mongoose.Schema({
+  username:    { type: String, required: true },
+  user_role:   { type: String, default: 'viewer' },
+  action_type: { type: String, required: true,
+    enum: ['create','update','delete','view','download','approve','reject','login','logout',
+           'submit','upload','print','search','navigate','generate_report','issue_stock',
+           'return_stock','schedule','complete','other'] },
+  module:      { type: String, required: true },   // e.g. 'stock','clients','hr','invoices'
+  description: { type: String, required: true },   // human-readable e.g. 'Created invoice INV-001'
+  ref_id:      { type: String, default: '' },      // optional related document ID
+  ref_name:    { type: String, default: '' },      // optional reference name e.g. invoice number
+  metadata:    { type: mongoose.Schema.Types.Mixed, default: {} }, // extra details
+}, { timestamps: true });
 
+ActivityLogSchema.index({ username: 1, createdAt: -1 });
+ActivityLogSchema.index({ createdAt: -1 });
 
+export const ActivityLog = createModelProxy('ActivityLog', mongoose.models.ActivityLog || mongoose.model('ActivityLog', ActivityLogSchema));
+
+// 31. Configuration Settings Schema
+const SettingsSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  value: { type: String, required: true }
+}, { timestamps: true });
+
+export const Settings = createModelProxy('Settings', mongoose.models.Settings || mongoose.model('Settings', SettingsSchema));
 
 

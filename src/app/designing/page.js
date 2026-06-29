@@ -19,6 +19,7 @@ export default function DesigningPage() {
 
   // Upload mode toggle
   const [uploadMode, setUploadMode] = useState('url'); // 'file' | 'url'
+  const [acceptanceUploadMode, setAcceptanceUploadMode] = useState('url'); // 'file' | 'url'
 
   // Form State
   const [selectedClient, setSelectedClient] = useState('');
@@ -26,7 +27,10 @@ export default function DesigningPage() {
   const [notes, setNotes] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [urlFileName, setUrlFileName] = useState('');
+  const [acceptanceUrlInput, setAcceptanceUrlInput] = useState('');
+  const [acceptanceUrlFileName, setAcceptanceUrlFileName] = useState('');
   const fileInputRef = useRef(null);
+  const acceptanceFileInputRef = useRef(null);
 
   const fetchData = async () => {
     try {
@@ -58,15 +62,37 @@ export default function DesigningPage() {
     try {
       setUploading(true);
 
-      if (uploadMode === 'file') {
-        const file = fileInputRef.current?.files?.[0];
-        if (!file) return alert('Please choose a file to upload.');
+      const useFormData = uploadMode === 'file' || acceptanceUploadMode === 'file';
 
+      if (useFormData) {
         const formData = new FormData();
-        formData.append('file', file);
         formData.append('client', selectedClient);
         formData.append('design_type', designType);
         formData.append('notes', notes);
+
+        // Design File
+        if (uploadMode === 'file') {
+          const file = fileInputRef.current?.files?.[0];
+          if (!file) return alert('Please choose a design file to upload.');
+          formData.append('file', file);
+        } else {
+          if (!urlInput.trim()) return alert('Please enter a valid design URL link.');
+          formData.append('file_url', urlInput.trim());
+          formData.append('file_name', urlFileName.trim() || urlInput.split('/').pop() || 'Design Link');
+        }
+
+        // Acceptance Document
+        if (acceptanceUploadMode === 'file') {
+          const accFile = acceptanceFileInputRef.current?.files?.[0];
+          if (accFile) {
+            formData.append('acceptance_file', accFile);
+          }
+        } else {
+          if (acceptanceUrlInput.trim()) {
+            formData.append('acceptance_file_url', acceptanceUrlInput.trim());
+            formData.append('acceptance_file_name', acceptanceUrlFileName.trim() || 'Acceptance Link');
+          }
+        }
 
         const res = await fetch('/api/designing', {
           method: 'POST',
@@ -79,23 +105,30 @@ export default function DesigningPage() {
           fetchData();
         } else {
           const err = await res.json();
-          alert(err.error || 'Failed to upload design.');
+          alert(err.error || 'Failed to save design.');
         }
       } else {
-        // URL mode
-        if (!urlInput.trim()) return alert('Please enter a valid URL.');
+        // JSON body (both are links)
+        if (!urlInput.trim()) return alert('Please enter a valid design URL.');
         const displayName = urlFileName.trim() || urlInput.split('/').pop() || 'Design File';
+
+        const bodyData = {
+          client: selectedClient,
+          design_type: designType,
+          file_name: displayName,
+          file_url: urlInput.trim(),
+          notes
+        };
+
+        if (acceptanceUrlInput.trim()) {
+          bodyData.acceptance_file_url = acceptanceUrlInput.trim();
+          bodyData.acceptance_file_name = acceptanceUrlFileName.trim() || 'Acceptance Link';
+        }
 
         const res = await fetch('/api/designing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client: selectedClient,
-            design_type: designType,
-            file_name: displayName,
-            file_url: urlInput.trim(),
-            notes
-          })
+          body: JSON.stringify(bodyData)
         });
 
         if (res.ok) {
@@ -119,8 +152,11 @@ export default function DesigningPage() {
     setNotes('');
     setUrlInput('');
     setUrlFileName('');
+    setAcceptanceUrlInput('');
+    setAcceptanceUrlFileName('');
     setSelectedClient('');
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (acceptanceFileInputRef.current) acceptanceFileInputRef.current.value = '';
   };
 
   const handleDeleteDesign = async (designId) => {
@@ -260,6 +296,11 @@ export default function DesigningPage() {
                       <td>
                         <strong style={{ color: 'var(--text-main)' }}>{d.client?.company || 'N/A'}</strong>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Contact: {d.client?.name || 'N/A'}</div>
+                        {d.acceptance_file_url && (
+                          <div style={{ fontSize: '11.5px', color: '#10b981', marginTop: '2.5px', fontWeight: '800' }}>
+                            📁 Acceptance copy attached
+                          </div>
+                        )}
                       </td>
                       <td>
                         <span className={`badge badge-${d.design_type === '2d' ? 'info' : 'warning'}`} style={{ fontSize: '11px', padding: '3px 8px' }}>
@@ -408,6 +449,70 @@ export default function DesigningPage() {
               </div>
             )}
 
+            {/* Client Acceptance copy upload or link */}
+            <div style={{ marginTop: '20px', borderTop: '1px dashed var(--card-border)', paddingTop: '16px', marginBottom: '16px' }}>
+              <label style={{ fontWeight: '700', fontSize: '13px', display: 'block', marginBottom: '8px', color: 'var(--text-main)' }}>
+                📁 Client Design Acceptance Copy (Optional)
+              </label>
+              
+              <div className="date-presets" style={{ marginBottom: '14px', width: '100%' }}>
+                <button
+                  type="button"
+                  className={`preset-btn ${acceptanceUploadMode === 'url' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '6px 12px', fontSize: '11px' }}
+                  onClick={() => setAcceptanceUploadMode('url')}
+                >
+                  🔗 Add Acceptance Link URL
+                </button>
+                <button
+                  type="button"
+                  className={`preset-btn ${acceptanceUploadMode === 'file' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '6px 12px', fontSize: '11px' }}
+                  onClick={() => setAcceptanceUploadMode('file')}
+                >
+                  📁 Upload Acceptance File
+                </button>
+              </div>
+
+              {acceptanceUploadMode === 'url' ? (
+                <>
+                  <div className="form-group" style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px' }}>Client Acceptance Link URL</label>
+                    <input
+                      type="url"
+                      className="form-control"
+                      placeholder="https://drive.google.com/file/d/..."
+                      value={acceptanceUrlInput}
+                      onChange={e => setAcceptanceUrlInput(e.target.value)}
+                      style={{ fontSize: '12px', padding: '8px 12px' }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px' }}>Display Name (optional)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="E.g. Signed Design Confirmation Document"
+                      value={acceptanceUrlFileName}
+                      onChange={e => setAcceptanceUrlFileName(e.target.value)}
+                      style={{ fontSize: '12px', padding: '8px 12px' }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '12px' }}>Acceptance Document File</label>
+                  <input
+                    type="file" 
+                    className="form-control" 
+                    ref={acceptanceFileInputRef}
+                    accept="image/*,application/pdf"
+                    style={{ padding: '6px 8px', fontSize: '12px' }}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="form-group">
               <label>Designer Notes / Description</label>
               <textarea
@@ -498,12 +603,29 @@ export default function DesigningPage() {
                 </div>
               </div>
 
-              <div>
+               <div>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Designer Notes / Remarks</span>
                 <div style={{ fontSize: '13px', color: 'var(--text-main)', background: '#fafafa', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '4px', fontStyle: 'italic' }}>
                   {selectedDesignForView.notes || 'No description provided.'}
                 </div>
               </div>
+
+              {selectedDesignForView.acceptance_file_url && (
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>📄 Client Design Acceptance Copy</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                    <a
+                      href={selectedDesignForView.acceptance_file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-sm btn-secondary"
+                      style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+                    >
+                      👁️ View Acceptance Copy ({selectedDesignForView.acceptance_file_name || 'Link/File'})
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {/* Preview block */}
               {selectedDesignForView.file_url && selectedDesignForView.file_url.match(/\.(jpeg|jpg|gif|png|webp)/i) && selectedDesignForView.file_url.startsWith('/uploads/') ? (

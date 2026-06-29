@@ -32,32 +32,71 @@ export async function POST(request, { params }) {
   }, 0);
 
   // Compute earnings
-  const basic = emp.basic_salary || 0;
-  const hra = Math.round(basic * (emp.hra_percent || 40) / 100);
-  const transport = emp.transport_allowance || 0;
-  const otherAllow = emp.other_allowance || 0;
-  
-  // Overtime pay
-  const otHours = attendance?.overtime_hours || 0;
-  const perHourRate = Math.round(basic / (26 * 8)); // 26 working days, 8 hours
-  const overtimePay = otHours * perHourRate * 1.5; // 1.5x for OT
+  const basicRate = emp.basic_salary || 0;
+  let basicPay = 0;
+  let overtimePay = 0;
+  let hra = 0;
+  let transport = emp.transport_allowance || 0;
+  let otherAllow = emp.other_allowance || 0;
 
-  const grossSalary = basic + hra + transport + otherAllow + overtimePay;
+  const totalWorkingDays = attendance?.total_working_days || 26;
+  const presentDays = attendance?.present_days || 0;
+  const absentDays = attendance?.absent_days || 0;
+  const otHours = attendance?.overtime_hours || 0; // For freelancers, this is total logged hours
+
+  if (emp.type === 'employee') {
+    // Full-time Employee: payout = basic_salary / 26 * present_days
+    basicPay = Math.round((basicRate / 26) * presentDays);
+
+    // HRA is calculated as % of monthly base salary rate
+    hra = Math.round(basicRate * (emp.hra_percent || 40) / 100);
+
+    // Overtime pay only for Supervisors (designation contains supervisor)
+    const isSupervisor = (emp.designation || '').toLowerCase().includes('supervisor');
+    if (isSupervisor) {
+      const perHourRate = basicRate / (26 * 8);
+      overtimePay = Math.round(otHours * perHourRate); // 1.0x rate (same salary & hourly rate)
+    } else {
+      overtimePay = 0;
+    }
+  } else {
+    // Freelancer & Consultant (Hourly Rate)
+    // basicRate is their hourly rate
+    const totalHours = otHours; // total logged hours is stored in overtime_hours field for freelancers/consultants
+    const stdHours = totalWorkingDays * 8;
+
+    if (emp.type === 'freelancer') {
+      const regularHours = Math.min(totalHours, stdHours);
+      const freelancerOtHours = Math.max(0, totalHours - stdHours);
+
+      basicPay = Math.round(regularHours * basicRate);
+      overtimePay = Math.round(freelancerOtHours * basicRate); // same hourly rate
+    } else {
+      // Consultant: all hours paid at hourly rate, no overtime split
+      basicPay = Math.round(totalHours * basicRate);
+      overtimePay = 0;
+    }
+
+    hra = 0; // HRA is not applicable to freelancers/consultants
+  }
+
+  const grossSalary = basicPay + hra + transport + otherAllow + overtimePay;
 
   // Compute deductions
-  const workingDays = attendance?.total_working_days || 26;
-  const absentDays = attendance?.absent_days || 0;
-  const perDayRate = Math.round(basic / 26);
+  let totalLeaveDeduction = 0;
+  const perDayRate = Math.round(basicRate / 26);
   
-  const leaveDeduction = Math.round(perDayRate * totalLeaveDays); // unpaid leave deduction
-  const absentDeduction = Math.round(perDayRate * absentDays);
-  const totalLeaveDeduction = leaveDeduction + absentDeduction;
-  
-  const pfDeduction = emp.type === 'employee' ? Math.round(basic * 0.12) : 0;
+  if (emp.type === 'employee') {
+    const leaveDeduction = Math.round(perDayRate * totalLeaveDays); // unpaid leave deduction
+    const absentDeduction = Math.round(perDayRate * absentDays);
+    totalLeaveDeduction = leaveDeduction + absentDeduction;
+  }
+
+  const pfDeduction = emp.type === 'employee' ? Math.round(basicRate * 0.12) : 0;
   const esiDeduction = emp.type === 'employee' ? Math.round(grossSalary * 0.0075) : 0;
   const tdsDeduction = emp.tds_percent ? Math.round(grossSalary * emp.tds_percent / 100) : 0;
-  const ptDeduction = (emp.type === 'employee' && basic > 15000) ? 200 : 0;
-  
+  const ptDeduction = (emp.type === 'employee' && basicRate > 15000) ? 200 : 0;
+
   const totalDeductions = pfDeduction + esiDeduction + tdsDeduction + ptDeduction + totalLeaveDeduction + (payroll.advance_deduction || 0) + (payroll.other_deduction || 0);
   const netSalary = Math.max(0, grossSalary - totalDeductions);
 

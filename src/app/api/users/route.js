@@ -4,7 +4,7 @@ import { User } from '@/lib/models';
 export async function GET(request) {
   try {
     await dbConnect();
-    const users = await User.find({}).sort({ username: 1 });
+    const users = await User.find({}).populate('employeeId').sort({ username: 1 });
     return Response.json(users);
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
@@ -29,6 +29,7 @@ export async function POST(request) {
       username: body.username,
       password: body.password,
       role: body.role,
+      employeeId: body.employeeId || null,
       allowedPages: body.allowedPages || []
     });
 

@@ -9,13 +9,13 @@ const ALL_PAGES = [
   'dashboard','clients','projects','payments','monthly-statements',
   'analytics','assets','team','amc','designing','purchase',
   'hr','hr-employees','hr-leaves','hr-attendance','hr-payroll',
-  'installation', 'manufacturing'
+  'installation', 'manufacturing', 'supervisor', 'supervisor-input', 'legend-vision', 'top-up-nuera'
 ];
 
 const RAW_MENU = [
   { type: 'item', name: 'Dashboard',             path: '/',                   icon: '📊', key: 'dashboard' },
   { type: 'item', name: 'CEO Console',           path: '/ceo',                icon: '👑', key: 'ceo' },
-  { type: 'item', name: 'Supervisor Portal',     path: '/supervisor',         icon: '👷', key: 'dashboard' },
+  { type: 'item', name: 'Supervisor Portal',     path: '/supervisor',         icon: '👷', key: 'supervisor' },
   { type: 'item', name: 'Sales Pipeline',         path: '/clients',            icon: '👥', key: 'clients' },
   { type: 'item', name: '2D & 3D Designs',        path: '/designing',          icon: '🎨', key: 'designing' },
   { type: 'item', name: 'Purchase & Stock',       path: '/purchase',           icon: '🛒', key: 'purchase' },
@@ -25,6 +25,8 @@ const RAW_MENU = [
   { type: 'item', name: 'Site Installation',      path: '/installation',       icon: '🔧', key: 'installation' },
   { type: 'item', name: 'Monthly Statements',     path: '/monthly-statements', icon: '📅', key: 'monthly-statements' },
   { type: 'item', name: 'Advanced Analytics',     path: '/analytics',          icon: '📈', key: 'analytics' },
+  { type: 'item', name: 'Legend Vision',          path: '/legend-vision',      icon: '✦',  key: 'legend-vision' },
+  { type: 'item', name: 'Top up Nuera',           path: '/top-up-nuera',       icon: '⚡',  key: 'top-up-nuera' },
   { type: 'item', name: 'Company Assets',         path: '/ceo?tab=assets',             icon: '🖥️', key: 'ceo' },
   { type: 'item', name: 'Team & Resources',       path: '/ceo?tab=team',               icon: '🤝', key: 'ceo' },
   { type: 'item', name: 'AMC Management',         path: '/amc',                icon: '🔄', key: 'amc' },
@@ -34,7 +36,7 @@ const RAW_MENU = [
   { type: 'item', name: 'Employees',              path: '/hr/employees',       icon: '👨‍💼', key: 'hr-employees' },
   { type: 'item', name: 'Leave Management',       path: '/hr/leaves',          icon: '🏖️', key: 'hr-leaves' },
   { type: 'item', name: 'Attendance',             path: '/hr/attendance',      icon: '✅', key: 'hr-attendance' },
-  { type: 'item', name: 'Supervisor Logs',        path: '/hr/supervisor-input', icon: '📋', key: 'hr-attendance' },
+  { type: 'item', name: 'Supervisor Logs',        path: '/hr/supervisor-input', icon: '📋', key: 'supervisor-input' },
   { type: 'item', name: 'Payroll',                path: '/hr/payroll',         icon: '💵', key: 'hr-payroll' },
 ];
 
